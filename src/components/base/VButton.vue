@@ -45,7 +45,7 @@ const onPointerDown = (event: PointerEvent) => {
 };
 
 const buttonStyle = computed(() => ({
-  height: size,
+  height: shape === "circle" ? undefined : size,
   width: shape === "circle" ? size : undefined,
   background,
   color,
@@ -104,6 +104,7 @@ const buttonStyle = computed(() => ({
 
 .base-button.shape-circle {
   aspect-ratio: 1;
+  height: auto;
   flex: 0 0 auto;
 }
 

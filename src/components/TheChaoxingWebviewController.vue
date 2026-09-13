@@ -128,7 +128,7 @@ onUnmounted(() => {
         :disabled="!canGoBack || isNavigating"
         color="#ebe2cf"
         shape="circle"
-        size="2rem"
+        size="20%"
         variant="translucent"
         class="back-btn"
         @click="handleGoBack"
@@ -138,7 +138,7 @@ onUnmounted(() => {
         :disabled="!canGoForward || isNavigating"
         color="#ebe2cf"
         shape="circle"
-        size="2rem"
+        size="20%"
         variant="translucent"
         @click="handleGoForward"
       />
@@ -147,7 +147,7 @@ onUnmounted(() => {
         :disabled="isNavigating"
         color="#ebe2cf"
         shape="circle"
-        size="2rem"
+        size="20%"
         variant="translucent"
         @click="handleReload"
       />
@@ -156,7 +156,7 @@ onUnmounted(() => {
         :disabled="isNavigating"
         color="#ebe2cf"
         shape="circle"
-        size="2rem"
+        size="20%"
         variant="translucent"
         @click="handleGoHome"
       />
@@ -207,10 +207,11 @@ onUnmounted(() => {
   width: 22.5%;
   height: 100%;
   display: flex;
-  gap: 5px;
   flex-direction: row;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  padding: 0 1%;
+  box-sizing: border-box;
   margin-right: auto;
 }
 
