@@ -83,6 +83,11 @@ button {
   transition: all 0.25s ease-out;
 }
 
+.icon {
+  width: 40%;
+  height: 40%;
+}
+
 /* 悬停状态 */
 button:hover {
   background-color: #0d58a4;
