@@ -92,7 +92,6 @@ watch(model, async () => {
 
 <style scoped>
 .api-panel {
-  width: 50%;
   flex: 1;
   display: flex;
   flex-direction: column;

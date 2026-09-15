@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref, useId, watch } from "vue";
 import { gsap } from "gsap";
 import VLabel from "./VLabel.vue";
+import { useScaleFeedback } from "@/composables/useScaleFeedback";
 
 const {
   label,
@@ -22,18 +23,12 @@ const ball = ref<HTMLElement>();
 let rotationAngle = 180;
 let settledBallState = false;
 
+const scaleFeedback = useScaleFeedback({
+  hoverScale: 1.25,
+});
+
 const toggle = () => {
   emit("update:modelValue", !modelValue);
-};
-
-const animateHover = (scale: number) => {
-  if (!toggleRoot.value) return;
-  gsap.killTweensOf(toggleRoot.value);
-  gsap.to(toggleRoot.value, {
-    scale,
-    duration: 0.75,
-    ease: "elastic.out",
-  });
 };
 
 const animatePress = () => {
@@ -56,10 +51,20 @@ const animateRelease = () => {
   });
 };
 
-const handlePointerLeave = () => {
-  animateHover(1);
+const handlePointerLeave = (event: PointerEvent) => {
+  scaleFeedback.handlePointerLeave(event);
   animateRelease();
   syncBallState(modelValue);
+};
+
+const handlePointerDown = (event: PointerEvent) => {
+  scaleFeedback.handlePointerDown(event);
+  animatePress();
+};
+
+const handlePointerUp = (event: PointerEvent) => {
+  scaleFeedback.handlePointerUp(event);
+  animateRelease();
 };
 
 const playBallAppear = (ballElement: HTMLElement) => {
@@ -149,10 +154,10 @@ onUnmounted(() => {
         :aria-checked="modelValue"
         tabindex="0"
         @click="toggle"
-        @pointerenter="animateHover(1.25)"
+        @pointerenter="scaleFeedback.handlePointerEnter"
         @pointerleave="handlePointerLeave"
-        @pointerdown="animatePress"
-        @pointerup="animateRelease"
+        @pointerdown="handlePointerDown"
+        @pointerup="handlePointerUp"
         @keydown.space.prevent="toggle"
         @keydown.enter.prevent="toggle"
       >

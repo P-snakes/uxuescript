@@ -1,5 +1,6 @@
 import { watchEffect, toValue, type MaybeRefOrGetter } from "vue";
 import { gsap } from "gsap";
+import { animateScale } from "./useScaleFeedback";
 
 export interface UseMagneticOptions {
   outerFactor?: number;
@@ -30,11 +31,7 @@ export function useMagnetic(
     }
 
     const onPointerEnter = () => {
-      gsap.to(outer, {
-        scale: 1.05,
-        duration: 0.75,
-        ease: "elastic.out",
-      });
+      animateScale(outer, 1.05, { duration: 0.75, ease: "elastic.out" });
     };
 
     const onPointerMove = (event: PointerEvent) => {
@@ -61,28 +58,17 @@ export function useMagnetic(
     };
 
     const onPointerDown = () => {
-      gsap.to(outer, {
-        scale: 0.95,
-        duration: 0.25,
-        ease: "power1.out",
-        overwrite: "auto",
-      });
+      animateScale(outer, 0.95, { duration: 0.25, ease: "power1.out" });
     };
 
     const onPointerUp = () => {
-      gsap.to(outer, {
-        scale: 1.05,
-        duration: 0.75,
-        ease: "elastic.out",
-        overwrite: "auto",
-      });
+      animateScale(outer, 1.05, { duration: 0.75, ease: "elastic.out" });
     };
 
     const onPointerLeave = () => {
-      gsap.to(outer, {
+      animateScale(outer, 1, {
         x: 0,
         y: 0,
-        scale: 1,
         duration: 0.5,
         ease: "back.out",
       });
