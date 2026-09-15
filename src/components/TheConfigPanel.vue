@@ -16,13 +16,6 @@ const configPanel = reactive({
   items: [
     { name: "API", ref: null },
     { name: "Course", ref: null },
-    { name: "Playback", ref: null },
-    { name: "Account", ref: null },
-    { name: "Appearance", ref: null },
-    { name: "Notifications", ref: null },
-    { name: "Shortcuts", ref: null },
-    { name: "Advanced", ref: null },
-    { name: "Debug", ref: null },
   ] satisfies ConfigItem[],
 });
 
@@ -49,7 +42,14 @@ const saveConfig = async () => {
         class="sidebar"
       />
       <div class="container">
-        <TheAPIPanel />
+        <TheAPIPanel
+          v-show="configPanel.activeIndex === 0"
+          ref="apiPanelRef"
+        />
+        <TheCourseConfigPanel
+          v-show="configPanel.activeIndex === 1"
+          ref="courseConfigPanelRef"
+        />
       </div>
     </div>
     <div

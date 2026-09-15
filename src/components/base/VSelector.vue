@@ -193,6 +193,7 @@ onUnmounted(() => {
   border-top: none;
   max-height: 175px;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   box-shadow: 0 6px 16px rgba(13, 88, 164, 0.15);
 }
 

@@ -67,6 +67,7 @@ const {
   height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
 
 .background-layer,

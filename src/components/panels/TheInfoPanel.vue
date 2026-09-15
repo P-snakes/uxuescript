@@ -71,6 +71,7 @@ const openIssues = async () => {
   font-size: 1.25rem;
   line-height: 1.5;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
 
 .guide-content p {

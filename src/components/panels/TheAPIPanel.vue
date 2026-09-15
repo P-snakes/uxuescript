@@ -92,6 +92,7 @@ watch(model, async () => {
 
 <style scoped>
 .api-panel {
+  height: 100%;
   flex: 1;
   display: flex;
   flex-direction: column;
