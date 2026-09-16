@@ -89,7 +89,7 @@ const {
   width: 100%;
   height: var(--item-height);
   background: rgb(128 128 128 / 10%);
-  transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .menu-layer {

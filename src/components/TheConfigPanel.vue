@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import VButton from "@/components/base/VButton.vue";
-import TheAPIPanel from "@/components/panels/TheAPIPanel.vue";
+import TheAPIPanel from "@/components/TheConfigPanel/TheAPIPanel.vue";
 import TheCourseConfigPanel from "@/components/panels/TheCourseConfigPanel.vue";
 import { commands } from "@/services/cmds";
-import { ComponentPublicInstance, reactive, ref } from "vue";
+import { ComponentPublicInstance, reactive, ref, watch } from "vue";
 import TheSidebar from "./TheConfigPanel/TheSidebar.vue";
 
 type ConfigItem = {
@@ -18,6 +18,16 @@ const configPanel = reactive({
     { name: "Course", ref: null },
   ] satisfies ConfigItem[],
 });
+
+const transitionName = ref("config-content-up");
+
+watch(
+  () => configPanel.activeIndex,
+  (nextIndex, previousIndex) => {
+    transitionName.value =
+      nextIndex > previousIndex ? "config-content-down" : "config-content-up";
+  },
+);
 
 const apiPanelRef = ref<InstanceType<typeof TheAPIPanel> | null>(null);
 const courseConfigPanelRef = ref<InstanceType<
@@ -42,14 +52,20 @@ const saveConfig = async () => {
         class="sidebar"
       />
       <div class="container">
-        <TheAPIPanel
-          v-show="configPanel.activeIndex === 0"
-          ref="apiPanelRef"
-        />
-        <TheCourseConfigPanel
-          v-show="configPanel.activeIndex === 1"
-          ref="courseConfigPanelRef"
-        />
+        <Transition :name="transitionName">
+          <TheAPIPanel
+            v-show="configPanel.activeIndex === 0"
+            ref="apiPanelRef"
+            class="config-panel-content"
+          />
+        </Transition>
+        <Transition :name="transitionName">
+          <TheCourseConfigPanel
+            v-show="configPanel.activeIndex === 1"
+            ref="courseConfigPanelRef"
+            class="config-panel-content"
+          />
+        </Transition>
       </div>
     </div>
     <div
@@ -84,8 +100,48 @@ const saveConfig = async () => {
 }
 
 .container {
+  position: relative;
   width: 75%;
   height: 100%;
+  overflow: hidden;
+}
+
+.config-panel-content {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.config-content-up-enter-active,
+.config-content-up-leave-active,
+.config-content-down-enter-active,
+.config-content-down-leave-active {
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  will-change: transform;
+}
+
+.config-content-up-enter-from {
+  transform: translateY(100%);
+}
+
+.config-content-up-leave-to {
+  transform: translateY(-100%);
+}
+
+.config-content-down-enter-from {
+  transform: translateY(-100%);
+}
+
+.config-content-down-leave-to {
+  transform: translateY(100%);
+}
+
+.config-content-up-enter-to,
+.config-content-up-leave-from,
+.config-content-down-enter-to,
+.config-content-down-leave-from {
+  transform: translateY(0);
 }
 
 .save-button {
