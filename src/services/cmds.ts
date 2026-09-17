@@ -113,7 +113,7 @@ export type LLMProvider = {
 	baseUrl: string,
 	apiKey: ApiKey | null,
 	models: string[],
-	chosenModelIndex: number | null,
+	chosenModel: number | null,
 };
 
 export type MetadataConfig = {

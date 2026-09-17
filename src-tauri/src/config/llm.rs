@@ -72,7 +72,7 @@ pub struct LLMProvider {
     pub api_key: Option<ApiKey>, // API Key (Option 允许免 Key / 未配置)
     pub models: Vec<String>,     // 支持的模型列表
     #[specta(type = Option<u32>)]
-    pub chosen_model_index: Option<usize>, // 当前选择的模型在 models 列表中的索引
+    pub chosen_model: Option<usize>, // 当前选择的模型在 models 列表中的索引
     #[serde(default)]
     #[specta(skip)]
     pub extra_body: Option<serde_json::Value>, // 协议特定额外 Body 参数 (如 temperature, stream)
@@ -168,7 +168,7 @@ mod tests {
                 id
             );
             let chosen_idx = provider
-                .chosen_model_index
+                .chosen_model
                 .unwrap_or_else(|| panic!("提供商 {} 必须有默认选中的模型索引", id));
             assert!(
                 chosen_idx < provider.models.len(),

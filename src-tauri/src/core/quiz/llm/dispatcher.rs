@@ -12,7 +12,7 @@ const MAX_CONCURRENCY: usize = 10;
 /// LLM 求解入口分发器
 pub async fn solve(provider: &LLMProvider, questions: Vec<Question>) -> Result<Vec<AnswerItem>> {
     let chosen_model = provider
-        .chosen_model_index
+        .chosen_model
         .and_then(|idx| provider.models.get(idx))
         .ok_or_else(|| anyhow::anyhow!("未为提供商 [{}] 选择有效模型", provider.name))?;
 
@@ -301,7 +301,7 @@ mod tests {
             let model =
                 std::env::var("OLLAMA_TEST_MODEL").unwrap_or_else(|_| "gemma4:26b".to_string());
             provider.models = vec![model];
-            provider.chosen_model_index = Some(0);
+            provider.chosen_model = Some(0);
             return Some(provider);
         }
 

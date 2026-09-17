@@ -108,7 +108,7 @@ pub fn switch_model(index: u32) {
     if let Some(p) = providers.get_mut(&*active_id) {
         let index = index as usize;
         if let Some(model) = p.models.get(index) {
-            p.chosen_model_index = Some(index);
+            p.chosen_model = Some(index);
             log::info!(
                 "AI Provider [{}] 已切换至模型 [{}]（索引：{}）",
                 p.name,
@@ -116,7 +116,7 @@ pub fn switch_model(index: u32) {
                 index
             );
         } else {
-            p.chosen_model_index = None;
+            p.chosen_model = None;
             log::warn!(
                 "无法切换 AI Provider [{}] 的模型：索引 [{}] 超出 {} 个模型的范围，已清空模型选择",
                 p.name,

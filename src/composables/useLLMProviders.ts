@@ -22,7 +22,7 @@ export function useLLMProviders() {
 
     return {
       label: "Model",
-      selectedIndex: provider?.chosenModelIndex ?? 0,
+      selectedIndex: provider?.chosenModel ?? 0,
       mutable: provider?.isCustom ?? false,
       items:
         provider?.models.map((model) => ({
@@ -50,7 +50,7 @@ export function useLLMProviders() {
       baseUrl: "https://api.example.com/v1",
       apiKey: null,
       models: [],
-      chosenModelIndex: null,
+      chosenModel: null,
     };
     await commands.upsertProvider(provider).catch(logCommandError);
     providers.push(provider);
@@ -81,7 +81,7 @@ export function useLLMProviders() {
   };
 
   const selectModel = async (index: number) => {
-    selectedProvider.value!.chosenModelIndex = index;
+    selectedProvider.value!.chosenModel = index;
     await commands.switchModel(index);
   };
   const addModel = async (name: string) => {
@@ -97,9 +97,8 @@ export function useLLMProviders() {
   const deleteModel = async (index: number) => {
     const provider = selectedProvider.value!;
     provider.models.splice(index, 1);
-    if (provider.chosenModelIndex === index) provider.chosenModelIndex = null;
-    else if ((provider.chosenModelIndex ?? -1) > index)
-      provider.chosenModelIndex! -= 1;
+    if (provider.chosenModel === index) provider.chosenModel = null;
+    else if ((provider.chosenModel ?? -1) > index) provider.chosenModel! -= 1;
     await saveSelectedProvider();
   };
   onMounted(async () => {
