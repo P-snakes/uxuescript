@@ -1,3 +1,7 @@
+<script lang="ts">
+export type { SelectorData, SelectorMethods } from "./VSelector.types";
+</script>
+
 <script setup lang="ts">
 import {
   computed,
@@ -10,106 +14,79 @@ import {
 } from "vue";
 import VLabel from "./VLabel.vue";
 import VRollTransition from "./VRollTransition.vue";
-import VTextBox from "./VTextBox.vue";
+import VSelectorDropdown from "./VSelectorDropdown.vue";
+import VSelectorEditor from "./VSelectorEditor.vue";
+import type { SelectorData, SelectorMethods } from "./VSelector.types";
 
-type OptionAction = "Edit" | "Delete";
-type SelectorOption = { label: string; actions?: OptionAction[] };
-type SelectorAction =
-  | { type: "create" }
-  | { type: "edit"; index: number }
-  | { type: "delete"; index: number }
-  | { type: "save" }
-  | { type: "cancel" };
-
-const {
-  modelValue,
-  label,
-  options = [],
-  id = useId(),
-  editing = false,
-  editorValue = "",
-  placeholder = "",
-  creatable = false,
-  showNewWhenEmpty = false,
-} = defineProps<{
-  modelValue: number;
-  label: string;
-  options?: (string | SelectorOption)[];
-  id?: string;
-  editing?: boolean;
-  editorValue?: string;
-  placeholder?: string;
-  creatable?: boolean;
-  showNewWhenEmpty?: boolean;
+const { data, methods } = defineProps<{
+  data: SelectorData;
+  methods: SelectorMethods;
 }>();
 
-const emit = defineEmits<{
-  (e: "update:modelValue", value: number): void;
-  (e: "update:editorValue", value: string): void;
-  (e: "action", action: SelectorAction): void;
-}>();
-
-const items = computed(() =>
-  options.map((option) =>
-    typeof option === "string" ? { label: option } : option,
-  ),
-);
-
-const selectOption = (index: number) => {
-  isOpen.value = false;
-  emit("update:modelValue", index);
-};
-
-const isEmpty = computed(() => items.value.length === 0);
-const showDirectNew = computed(() => isEmpty.value && showNewWhenEmpty);
-const hasDropdown = computed(
-  () => !showDirectNew.value && (!isEmpty.value || creatable),
-);
-const displayText = computed(() =>
-  showDirectNew.value ? "+ New" : (items.value[modelValue]?.label ?? ""),
-);
-
-const createOption = () => {
-  isOpen.value = false;
-  emit("action", { type: "create" });
-};
-
-const runAction = (action: OptionAction, index: number) => {
-  isOpen.value = false;
-  emit("action", {
-    type: action === "Edit" ? "edit" : "delete",
-    index,
-  });
-};
-
+const id = useId();
 const isOpen = ref(false);
+const editTarget = ref<number | "new" | null>(null);
+const draft = ref("");
 const dropdownRef = ref<HTMLElement | null>(null);
 const triggerRef = ref<HTMLElement | null>(null);
-const editorRef = ref<InstanceType<typeof VTextBox> | null>(null);
+const editorRef = ref<InstanceType<typeof VSelectorEditor> | null>(null);
 const optionHeight = ref("48px");
 let triggerResizeObserver: ResizeObserver | undefined;
 
-watch(
-  () => editing,
-  async (value) => {
-    isOpen.value = false;
-    await nextTick();
-    if (value) editorRef.value?.focus();
-    else triggerRef.value?.focus();
-  },
+const showDirectNew = computed(() => data.mutable && data.items.length === 0);
+const hasDropdown = computed(() => data.items.length > 0 || data.mutable);
+const displayText = computed(() =>
+  showDirectNew.value ? "+ New" : (data.items[data.selectedIndex]?.label ?? ""),
 );
 
-const toggleDropdown = () => {
-  if (editing) return;
-  if (showDirectNew.value) createOption();
-  else if (hasDropdown.value) isOpen.value = !isOpen.value;
+watch(editTarget, async (target) => {
+  isOpen.value = false;
+  await nextTick();
+  if (target !== null) editorRef.value?.focus();
+  else triggerRef.value?.focus();
+});
+
+const closeEditor = () => {
+  editTarget.value = null;
+  draft.value = "";
 };
 
-const onEditorEnter = (event: KeyboardEvent) => {
-  if (!(event.target instanceof HTMLInputElement) || event.isComposing) return;
-  event.preventDefault();
-  event.stopPropagation();
-  emit("action", { type: "save" });
+const selectOption = (index: number) => {
+  isOpen.value = false;
+  methods.select(index);
+};
+
+const startCreate = () => {
+  isOpen.value = false;
+  draft.value = "";
+  editTarget.value = "new";
+};
+
+const startEdit = (index: number) => {
+  isOpen.value = false;
+  draft.value = data.items[index]?.label ?? "";
+  editTarget.value = index;
+};
+
+const saveEditor = () => {
+  if (!draft.value.trim()) return;
+
+  if (editTarget.value === "new") methods.create(draft.value);
+  else if (editTarget.value !== null)
+    methods.edit(editTarget.value, draft.value);
+
+  closeEditor();
+};
+
+const removeOption = (index: number) => {
+  isOpen.value = false;
+  methods.remove(index);
+};
+
+const toggleDropdown = () => {
+  if (editTarget.value !== null) return;
+  if (showDirectNew.value) startCreate();
+  else if (hasDropdown.value) isOpen.value = !isOpen.value;
 };
 
 const handleClickOutside = (event: MouseEvent) => {
@@ -140,8 +117,8 @@ onUnmounted(() => {
 <template>
   <div class="base-config-select">
     <VLabel
-      :label="label"
-      :for="editing ? `${id}-editor` : id"
+      :label="data.label"
+      :for="editTarget !== null ? `${id}-editor` : id"
     />
 
     <div
@@ -149,21 +126,23 @@ onUnmounted(() => {
       class="input-section"
     >
       <div
-        :id="editing ? undefined : id"
+        :id="editTarget !== null ? undefined : id"
         ref="triggerRef"
         class="select-trigger"
-        :class="{ 'is-open': isOpen, 'is-editing': editing }"
-        :tabindex="editing ? -1 : 0"
-        :role="editing ? undefined : 'button'"
-        :aria-expanded="editing || !hasDropdown ? undefined : isOpen"
-        :aria-disabled="!editing && !hasDropdown && !showDirectNew"
+        :class="{ 'is-editing': editTarget !== null }"
+        :tabindex="editTarget !== null ? -1 : 0"
+        :role="editTarget !== null ? undefined : 'button'"
+        :aria-expanded="
+          editTarget !== null || !hasDropdown ? undefined : isOpen
+        "
+        :aria-disabled="editTarget === null && !hasDropdown"
         @click="toggleDropdown"
         @keydown.space.self.prevent="toggleDropdown"
         @keydown.enter.self.prevent="toggleDropdown"
         @keydown.escape.prevent="isOpen = false"
       >
         <VRollTransition
-          v-show="!editing"
+          v-show="editTarget === null"
           :value="displayText"
           class="selected-value"
         >
@@ -171,42 +150,21 @@ onUnmounted(() => {
             <span class="selected-text">{{ value }}</span>
           </template>
         </VRollTransition>
-        <VTextBox
-          :id="`${id}-editor`"
+        <VSelectorEditor
           ref="editorRef"
-          class="select-editor"
-          :inert="!editing"
-          :aria-hidden="!editing"
-          :model-value="editorValue"
-          :placeholder="placeholder"
-          pattern=".*"
-          @update:model-value="emit('update:editorValue', $event)"
-          @keydown.enter="onEditorEnter"
-          @keydown.escape.stop.prevent="emit('action', { type: 'cancel' })"
-        >
-          <template #trailing>
-            <div
-              v-if="editing"
-              class="editor-actions"
-            >
-              <button
-                type="button"
-                :disabled="!editorValue.trim()"
-                @click.stop="emit('action', { type: 'save' })"
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                @click.stop="emit('action', { type: 'cancel' })"
-              >
-                Cancel
-              </button>
-            </div>
-          </template>
-        </VTextBox>
+          :data="{
+            active: editTarget !== null,
+            draft,
+            id: `${id}-editor`,
+          }"
+          :methods="{
+            updateDraft: (value) => (draft = value),
+            save: saveEditor,
+            cancel: closeEditor,
+          }"
+        />
         <span
-          v-show="!editing && hasDropdown"
+          v-show="editTarget === null && !showDirectNew && hasDropdown"
           class="select-arrow"
           :class="{ 'is-open': isOpen }"
         >
@@ -229,51 +187,21 @@ onUnmounted(() => {
       </div>
 
       <Transition name="dropdown">
-        <div
-          v-show="isOpen && hasDropdown && !editing"
-          class="select-dropdown-wrapper"
-          :style="{ '--option-height': optionHeight }"
-        >
-          <div class="select-dropdown custom-scrollbar">
-            <div
-              v-for="(option, index) in items"
-              :key="index"
-              class="select-option"
-              :class="{ 'is-selected': index === modelValue }"
-            >
-              <button
-                type="button"
-                class="option-label"
-                @click="selectOption(index)"
-              >
-                {{ option.label }}
-              </button>
-              <button
-                v-for="action in option.actions"
-                :key="action"
-                type="button"
-                class="option-action"
-                :class="{ 'is-danger': action === 'Delete' }"
-                :aria-label="`${action} ${option.label}`"
-                @click="runAction(action, index)"
-              >
-                {{ action }}
-              </button>
-            </div>
-            <div
-              v-if="creatable"
-              class="select-option"
-            >
-              <button
-                type="button"
-                class="option-label"
-                @click="createOption"
-              >
-                + New
-              </button>
-            </div>
-          </div>
-        </div>
+        <VSelectorDropdown
+          v-show="isOpen && hasDropdown && editTarget === null"
+          :data="{
+            items: data.items,
+            selectedIndex: data.selectedIndex,
+            mutable: data.mutable,
+            optionHeight,
+          }"
+          :methods="{
+            select: selectOption,
+            create: startCreate,
+            edit: startEdit,
+            remove: removeOption,
+          }"
+        />
       </Transition>
     </div>
   </div>
@@ -295,8 +223,7 @@ onUnmounted(() => {
   position: relative;
 }
 
-.select-trigger,
-.select-option {
+.select-trigger {
   height: 100%;
   width: 100%;
   box-sizing: border-box;
@@ -305,41 +232,6 @@ onUnmounted(() => {
   align-items: center;
   cursor: pointer;
   user-select: none;
-}
-
-.select-option {
-  height: var(--option-height);
-  padding: 0;
-}
-
-.option-label,
-.option-action {
-  height: 100%;
-  padding: 0 12px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.option-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.option-action {
-  flex: 0 0 auto;
-  padding: 0 6px;
-  font-size: 0.75rem;
-}
-
-.option-action:hover {
-  background: rgba(0, 0, 0, 0.08);
 }
 
 .select-trigger {
@@ -438,35 +330,6 @@ onUnmounted(() => {
   background: #ebe2cf;
 }
 
-.editor-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-left: 0.5rem;
-}
-
-.editor-actions button {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #0d58a4;
-  font: inherit;
-  font-size: 0.75rem;
-  cursor: pointer;
-}
-
-.editor-actions button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.option-action.is-danger {
-  color: #a43724;
-}
-
-.is-selected .option-action.is-danger {
-  color: #ffd1c8;
-}
-
 .selected-text {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -484,43 +347,6 @@ onUnmounted(() => {
 
 .select-arrow.is-open {
   transform: rotate(0deg);
-}
-
-.select-dropdown-wrapper {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  width: 100%;
-  z-index: 10;
-  overflow: hidden;
-}
-
-.select-dropdown {
-  width: 100%;
-  box-sizing: border-box;
-  background-color: #ebe2cf;
-  border: 2px solid #0d58a4;
-  border-top: none;
-  max-height: 175px;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  box-shadow: 0 6px 16px rgba(13, 88, 164, 0.15);
-}
-
-.select-option {
-  transition:
-    background-color 0.15s ease-in-out,
-    color 0.15s ease-in-out;
-}
-
-.select-option:hover {
-  background-color: rgba(0, 0, 0, 0.08);
-}
-
-.select-option.is-selected {
-  background-color: #0d58a4;
-  color: #ffffff;
 }
 
 /* 下拉菜单缓动动画 */

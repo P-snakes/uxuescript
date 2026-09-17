@@ -162,7 +162,7 @@ const onInput = (event: Event) => {
 }
 
 .is-disabled .shadow-shell {
-  display: none;
+  --t: 0px;
 }
 
 .is-disabled .input-surface {
