@@ -1,16 +1,26 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 
-const { modelValue, placeholder, pattern, id, maskOnBlur } = defineProps<{
+const {
+  modelValue,
+  placeholder,
+  pattern,
+  id,
+  maskOnBlur,
+  disabled = false,
+} = defineProps<{
   modelValue: string | number;
   placeholder: string;
   pattern: string;
   id: string;
   maskOnBlur?: boolean;
+  disabled?: boolean;
 }>();
 
 const emit = defineEmits(["update:modelValue", "change"]);
 const inputFocused = ref(false);
+const inputRef = ref<HTMLInputElement | null>(null);
+defineExpose({ focus: () => inputRef.value?.focus() });
 const displayValue = computed(() =>
   maskOnBlur && !inputFocused.value
     ? "*".repeat(String(modelValue).length)
@@ -31,19 +41,35 @@ const onInput = (event: Event) => {
 </script>
 
 <template>
-  <div class="base-text-box">
-    <input
-      :id="id"
-      :value="displayValue"
-      :placeholder="placeholder"
-      :pattern="pattern"
-      autocomplete="off"
-      class="input-field"
-      @input="onInput"
-      @focus="inputFocused = true"
-      @blur="inputFocused = false"
-      @change="$emit('change', $event)"
-    />
+  <div
+    class="base-text-box"
+    :class="{ 'is-disabled': disabled }"
+  >
+    <div
+      class="input-surface"
+      :inert="disabled"
+    >
+      <input
+        :id="id"
+        ref="inputRef"
+        :disabled="disabled"
+        :value="displayValue"
+        :placeholder="placeholder"
+        :pattern="pattern"
+        autocomplete="off"
+        class="input-field"
+        @input="onInput"
+        @focus="inputFocused = true"
+        @blur="inputFocused = false"
+        @change="$emit('change', $event)"
+      />
+      <div
+        v-if="$slots.trailing"
+        class="trailing-content"
+      >
+        <slot name="trailing" />
+      </div>
+    </div>
     <div class="shadow-shell" />
   </div>
 </template>
@@ -51,12 +77,32 @@ const onInput = (event: Event) => {
 <style scoped>
 .base-text-box {
   --brand-color: #0d58a4;
-  --contrast-border: color-mix(in srgb, var(--brand-color), black 30%);
   --base-thickness: 2px;
   --lift-thickness: 5px;
 
   position: relative;
   width: 100%;
+}
+
+.input-surface {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.input-surface:focus-within {
+  transform: translate(-3px, -3px);
+}
+
+.trailing-content {
+  position: absolute;
+  inset-block: 0;
+  right: 12px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
 }
 
 .input-field {
@@ -74,11 +120,6 @@ const onInput = (event: Event) => {
   z-index: 5;
 
   transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
-}
-
-.input-field:focus {
-  transform: translate(-3px, -3px);
-  border-color: var(--contrast-border);
 }
 
 .shadow-shell {
@@ -107,16 +148,30 @@ const onInput = (event: Event) => {
     transform 0.2s cubic-bezier(0.2, 0, 0, 1);
 }
 
-.input-field:focus ~ .shadow-shell {
+.input-surface:focus-within ~ .shadow-shell {
   --t: var(--lift-thickness);
-  background: var(--contrast-border);
+  background: var(--brand-color);
 }
 
-.input-field:hover ~ .shadow-shell {
-  background: var(--contrast-border);
+.input-surface:hover ~ .shadow-shell {
+  background: var(--brand-color);
 }
 
 .input-field::placeholder {
   color: color-mix(in srgb, var(--brand-color), transparent 60%);
+}
+
+.is-disabled .shadow-shell {
+  display: none;
+}
+
+.is-disabled .input-surface {
+  transform: none;
+}
+
+.input-field:disabled {
+  opacity: 1;
+  cursor: default;
+  -webkit-text-fill-color: var(--brand-color);
 }
 </style>

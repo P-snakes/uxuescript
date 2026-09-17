@@ -2,44 +2,25 @@
 import VButton from "@/components/base/VButton.vue";
 import TheAPIPanel from "@/components/panels/TheAPIPanel.vue";
 import TheCourseConfigPanel from "@/components/panels/TheCourseConfigPanel.vue";
-import { commands } from "@/services/cmds";
-import { ref } from "vue";
+import { useConfigStore } from "@/stores/config";
 
-const apiPanelRef = ref<InstanceType<typeof TheAPIPanel> | null>(null);
-const courseConfigPanelRef = ref<InstanceType<
-  typeof TheCourseConfigPanel
-> | null>(null);
-
-const saveConfig = async () => {
-  await Promise.all([
-    apiPanelRef.value?.setKey(),
-    courseConfigPanelRef.value?.setOptions(),
-  ]).catch((e) => console.error("设置配置失败: ", e));
-  await commands.saveConfig().catch((e) => console.error("保存配置失败: ", e));
-};
+const configStore = useConfigStore();
 </script>
 
 <template>
   <div class="setting-panel">
     <h1 class="title">Configuration</h1>
     <div class="info-panel">
-      <TheAPIPanel
-        ref="apiPanelRef"
-        class="api-panel"
-      />
-      <TheCourseConfigPanel
-        ref="courseConfigPanelRef"
-        class="course-config-panel"
-      />
+      <TheAPIPanel class="api-panel" />
+      <TheCourseConfigPanel class="course-config-panel" />
     </div>
-    <div
-      class="save-button"
-      @click="saveConfig"
-    >
+    <div class="save-button">
       <VButton
         label="Save"
         class="button-text"
         style="width: 35%; height: 60%"
+        :disabled="configStore.busy"
+        @click="configStore.save"
       />
     </div>
   </div>
@@ -50,7 +31,6 @@ const saveConfig = async () => {
   display: flex;
   flex-direction: column;
 }
-
 .title {
   height: 10%;
   width: 100%;
@@ -59,26 +39,22 @@ const saveConfig = async () => {
   align-items: center;
   justify-content: center;
 }
-
 .info-panel {
   height: 70%;
   width: 100%;
   display: flex;
   flex-direction: row;
 }
-
 .api-panel {
   width: 50%;
   height: 100%;
 }
-
 .save-button {
   height: 20%;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-
 .button-text {
   font-size: 1.75rem;
   letter-spacing: 1px;

@@ -1,28 +1,116 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, useId } from "vue";
+import {
+  computed,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  ref,
+  useId,
+  watch,
+} from "vue";
 import VLabel from "./VLabel.vue";
+import VRollTransition from "./VRollTransition.vue";
+import VTextBox from "./VTextBox.vue";
+
+type OptionAction = "Edit" | "Delete";
+type SelectorOption = { label: string; actions?: OptionAction[] };
+type SelectorAction =
+  | { type: "create" }
+  | { type: "edit"; index: number }
+  | { type: "delete"; index: number }
+  | { type: "save" }
+  | { type: "cancel" };
 
 const {
   modelValue,
   label,
-  options = ["undefined", "option1", "option2", "option3"],
+  options = [],
   id = useId(),
+  editing = false,
+  editorValue = "",
+  placeholder = "",
+  creatable = false,
+  showNewWhenEmpty = false,
 } = defineProps<{
   modelValue: number;
   label: string;
-  options?: string[];
+  options?: (string | SelectorOption)[];
   id?: string;
+  editing?: boolean;
+  editorValue?: string;
+  placeholder?: string;
+  creatable?: boolean;
+  showNewWhenEmpty?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: "update:modelValue", value: number): void;
+  (e: "update:editorValue", value: string): void;
+  (e: "action", action: SelectorAction): void;
 }>();
+
+const items = computed(() =>
+  options.map((option) =>
+    typeof option === "string" ? { label: option } : option,
+  ),
+);
+
+const selectOption = (index: number) => {
+  isOpen.value = false;
+  emit("update:modelValue", index);
+};
+
+const isEmpty = computed(() => items.value.length === 0);
+const showDirectNew = computed(() => isEmpty.value && showNewWhenEmpty);
+const hasDropdown = computed(
+  () => !showDirectNew.value && (!isEmpty.value || creatable),
+);
+const displayText = computed(() =>
+  showDirectNew.value ? "+ New" : (items.value[modelValue]?.label ?? ""),
+);
+
+const createOption = () => {
+  isOpen.value = false;
+  emit("action", { type: "create" });
+};
+
+const runAction = (action: OptionAction, index: number) => {
+  isOpen.value = false;
+  emit("action", {
+    type: action === "Edit" ? "edit" : "delete",
+    index,
+  });
+};
 
 const isOpen = ref(false);
 const dropdownRef = ref<HTMLElement | null>(null);
 const triggerRef = ref<HTMLElement | null>(null);
+const editorRef = ref<InstanceType<typeof VTextBox> | null>(null);
 const optionHeight = ref("48px");
 let triggerResizeObserver: ResizeObserver | undefined;
+
+watch(
+  () => editing,
+  async (value) => {
+    isOpen.value = false;
+    await nextTick();
+    if (value) editorRef.value?.focus();
+    else triggerRef.value?.focus();
+  },
+);
+
+const toggleDropdown = () => {
+  if (editing) return;
+  if (showDirectNew.value) createOption();
+  else if (hasDropdown.value) isOpen.value = !isOpen.value;
+};
+
+const onEditorEnter = (event: KeyboardEvent) => {
+  if (!(event.target instanceof HTMLInputElement) || event.isComposing) return;
+  event.preventDefault();
+  event.stopPropagation();
+  emit("action", { type: "save" });
+};
 
 const handleClickOutside = (event: MouseEvent) => {
   if (dropdownRef.value && !dropdownRef.value.contains(event.target as Node)) {
@@ -30,9 +118,8 @@ const handleClickOutside = (event: MouseEvent) => {
   }
 };
 
-onMounted(() => document.addEventListener("click", handleClickOutside));
-
 onMounted(() => {
+  document.addEventListener("click", handleClickOutside);
   if (!triggerRef.value) return;
 
   const updateOptionHeight = () => {
@@ -54,7 +141,7 @@ onUnmounted(() => {
   <div class="base-config-select">
     <VLabel
       :label="label"
-      :for="id"
+      :for="editing ? `${id}-editor` : id"
     />
 
     <div
@@ -62,17 +149,64 @@ onUnmounted(() => {
       class="input-section"
     >
       <div
-        :id="id"
+        :id="editing ? undefined : id"
         ref="triggerRef"
         class="select-trigger"
-        :class="{ 'is-open': isOpen }"
-        @click="isOpen = !isOpen"
-        @keydown.space.prevent="isOpen = !isOpen"
-        @keydown.enter.prevent="isOpen = !isOpen"
+        :class="{ 'is-open': isOpen, 'is-editing': editing }"
+        :tabindex="editing ? -1 : 0"
+        :role="editing ? undefined : 'button'"
+        :aria-expanded="editing || !hasDropdown ? undefined : isOpen"
+        :aria-disabled="!editing && !hasDropdown && !showDirectNew"
+        @click="toggleDropdown"
+        @keydown.space.self.prevent="toggleDropdown"
+        @keydown.enter.self.prevent="toggleDropdown"
         @keydown.escape.prevent="isOpen = false"
       >
-        <span class="selected-text">{{ options?.[modelValue] ?? "" }}</span>
+        <VRollTransition
+          v-show="!editing"
+          :value="displayText"
+          class="selected-value"
+        >
+          <template #default="{ value }">
+            <span class="selected-text">{{ value }}</span>
+          </template>
+        </VRollTransition>
+        <VTextBox
+          :id="`${id}-editor`"
+          ref="editorRef"
+          class="select-editor"
+          :inert="!editing"
+          :aria-hidden="!editing"
+          :model-value="editorValue"
+          :placeholder="placeholder"
+          pattern=".*"
+          @update:model-value="emit('update:editorValue', $event)"
+          @keydown.enter="onEditorEnter"
+          @keydown.escape.stop.prevent="emit('action', { type: 'cancel' })"
+        >
+          <template #trailing>
+            <div
+              v-if="editing"
+              class="editor-actions"
+            >
+              <button
+                type="button"
+                :disabled="!editorValue.trim()"
+                @click.stop="emit('action', { type: 'save' })"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                @click.stop="emit('action', { type: 'cancel' })"
+              >
+                Cancel
+              </button>
+            </div>
+          </template>
+        </VTextBox>
         <span
+          v-show="!editing && hasDropdown"
           class="select-arrow"
           :class="{ 'is-open': isOpen }"
         >
@@ -85,26 +219,58 @@ onUnmounted(() => {
             <path d="m256-424-56-56 280-280 280 280-56 56-224-223-224 223Z" />
           </svg>
         </span>
+        <span
+          v-for="edge in ['top', 'right', 'bottom', 'left']"
+          :key="edge"
+          class="select-edge"
+          :class="`edge-${edge}`"
+          aria-hidden="true"
+        />
       </div>
 
       <Transition name="dropdown">
         <div
-          v-show="isOpen"
+          v-show="isOpen && hasDropdown && !editing"
           class="select-dropdown-wrapper"
           :style="{ '--option-height': optionHeight }"
         >
           <div class="select-dropdown custom-scrollbar">
             <div
-              v-for="(opt, index) in options"
+              v-for="(option, index) in items"
               :key="index"
               class="select-option"
               :class="{ 'is-selected': index === modelValue }"
-              @click="
-                emit('update:modelValue', index);
-                isOpen = false;
-              "
             >
-              {{ opt }}
+              <button
+                type="button"
+                class="option-label"
+                @click="selectOption(index)"
+              >
+                {{ option.label }}
+              </button>
+              <button
+                v-for="action in option.actions"
+                :key="action"
+                type="button"
+                class="option-action"
+                :class="{ 'is-danger': action === 'Delete' }"
+                :aria-label="`${action} ${option.label}`"
+                @click="runAction(action, index)"
+              >
+                {{ action }}
+              </button>
+            </div>
+            <div
+              v-if="creatable"
+              class="select-option"
+            >
+              <button
+                type="button"
+                class="option-label"
+                @click="createOption"
+              >
+                + New
+              </button>
             </div>
           </div>
         </div>
@@ -143,19 +309,162 @@ onUnmounted(() => {
 
 .select-option {
   height: var(--option-height);
+  padding: 0;
+}
+
+.option-label,
+.option-action {
+  height: 100%;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.option-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.option-action {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  font-size: 0.75rem;
+}
+
+.option-action:hover {
+  background: rgba(0, 0, 0, 0.08);
 }
 
 .select-trigger {
+  position: relative;
   width: 100%;
+  min-height: calc(1.5em + 4px);
   font-size: 1rem;
-  border: 2px solid #0d58a4;
-  background-color: #ebe2cf;
+  border: 0;
+  padding: 2px 14px;
+  isolation: isolate;
   justify-content: space-between;
-  transition: border-color 0.2s;
 }
 
-.select-trigger:hover {
-  border-color: #0b4c8d;
+.select-edge {
+  position: absolute;
+  z-index: 3;
+  background: #0d58a4;
+  pointer-events: none;
+  transition: transform 0.24s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.edge-top,
+.edge-bottom {
+  left: 0;
+  right: 0;
+  height: 2px;
+  transform-origin: right;
+}
+
+.edge-left,
+.edge-right {
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform-origin: bottom;
+}
+
+.edge-top {
+  top: 0;
+}
+.edge-bottom {
+  bottom: 0;
+}
+.edge-left {
+  left: 0;
+}
+.edge-right {
+  right: 0;
+}
+
+.is-editing .edge-top,
+.is-editing .edge-bottom {
+  transform: scaleX(0);
+}
+
+.is-editing .edge-left,
+.is-editing .edge-right {
+  transform: scaleY(0);
+}
+
+.select-trigger.is-editing {
+  cursor: text;
+}
+
+.select-trigger[aria-disabled="true"] {
+  cursor: default;
+}
+
+.selected-value {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  height: 100%;
+  min-height: 1.5em;
+}
+
+.select-editor {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  user-select: text;
+}
+
+.select-editor :deep(.input-field) {
+  box-sizing: border-box;
+  padding-right: 7rem;
+}
+
+.select-trigger:not(.is-editing)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: #ebe2cf;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: 0.5rem;
+}
+
+.editor-actions button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #0d58a4;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.editor-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.option-action.is-danger {
+  color: #a43724;
+}
+
+.is-selected .option-action.is-danger {
+  color: #ffd1c8;
 }
 
 .selected-text {
@@ -165,6 +474,8 @@ onUnmounted(() => {
 }
 
 .select-arrow {
+  position: relative;
+  z-index: 2;
   display: flex;
   transition: transform 0.2s;
   color: #0d58a4;

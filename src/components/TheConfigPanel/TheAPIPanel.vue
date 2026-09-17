@@ -1,315 +1,208 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import VButton from "@/components/base/VButton.vue";
 import VInput from "@/components/base/VInput.vue";
 import VSelector from "@/components/base/VSelector.vue";
+import { useConfigStore } from "@/stores/config";
 
-export type ModelItem = {
-  id: string;
-  name: string;
-  isCustom?: boolean;
+type Editor = {
+  kind: "provider" | "model";
+  index: number | null;
+  value: string;
 };
+type SelectorAction =
+  | { type: "create" }
+  | { type: "edit"; index: number }
+  | { type: "delete"; index: number }
+  | { type: "save" }
+  | { type: "cancel" };
 
-export type ProviderItem = {
-  id: string;
-  name: string;
-  endpoint: string;
-  apiKey: string;
-  isCustom?: boolean;
-  models: ModelItem[];
-};
-
-type ConnectionStatus = "idle" | "testing" | "success" | "failed";
-
-const providers = ref<ProviderItem[]>([
-  {
-    id: "openai",
-    name: "OpenAI",
-    endpoint: "https://api.openai.com/v1",
-    apiKey: "",
-    isCustom: false,
-    models: [
-      { id: "gpt-4o", name: "GPT-4o", isCustom: false },
-      { id: "gpt-4o-mini", name: "GPT-4o mini", isCustom: false },
-    ],
-  },
-  {
-    id: "deepseek",
-    name: "DeepSeek",
-    endpoint: "https://api.deepseek.com/v1",
-    apiKey: "",
-    isCustom: false,
-    models: [
-      { id: "deepseek-chat", name: "DeepSeek-V3", isCustom: false },
-      { id: "deepseek-reasoner", name: "DeepSeek-R1", isCustom: false },
-    ],
-  },
-  {
-    id: "anthropic",
-    name: "Anthropic",
-    endpoint: "https://api.anthropic.com",
-    apiKey: "",
-    isCustom: false,
-    models: [
-      { id: "claude-3-5-sonnet", name: "Claude 3.5 Sonnet", isCustom: false },
-    ],
-  },
-]);
-
-const providerIndex = ref(0);
-const modelIndex = ref(0);
-
-const isAddingProvider = ref(false);
-const newProviderName = ref("");
-const newProviderEndpoint = ref("");
-
-const isAddingModel = ref(false);
-const newModelName = ref("");
-
-const connectionStatus = ref<ConnectionStatus>("idle");
+const configStore = useConfigStore();
+const editor = ref<Editor | null>(null);
+const localError = ref("");
+const connectionStatus = ref<"idle" | "testing" | "success" | "failed">("idle");
 let testTimer: ReturnType<typeof setTimeout> | undefined;
 
-const selectedProvider = computed(() => providers.value[providerIndex.value]);
-const selectedModel = computed(
-  () => selectedProvider.value?.models[modelIndex.value],
+const entries = computed(() => configStore.entries);
+const selectedProvider = computed(() => configStore.selectedProvider);
+const providerIndex = computed(() =>
+  entries.value.findIndex(([id]) => id === configStore.activeId),
 );
-
-const providerNames = computed(() => providers.value.map((p) => p.name));
-const modelNames = computed(
-  () => selectedProvider.value?.models.map((m) => m.name) ?? [],
+const modelIndex = computed(() => selectedProvider.value?.chosen_model ?? -1);
+const actions = ["Edit", "Delete"] as const;
+const providerOptions = computed(() =>
+  entries.value.map(([, provider]) => ({
+    label: provider.name,
+    actions: provider.is_custom ? [...actions] : [],
+  })),
 );
-
+const modelOptions = computed(
+  () =>
+    selectedProvider.value?.models.map((label) => ({
+      label,
+      actions: selectedProvider.value?.is_custom ? [...actions] : [],
+    })) ?? [],
+);
+const editorValue = computed({
+  get: () => editor.value?.value ?? "",
+  set: (value: string) => {
+    if (editor.value) editor.value.value = value;
+  },
+});
 const endpoint = computed({
-  get: () => selectedProvider.value?.endpoint ?? "",
-  set: (val: string | number) => {
-    if (selectedProvider.value) selectedProvider.value.endpoint = String(val);
+  get: () => selectedProvider.value?.base_url ?? "",
+  set: (value: string | number) => {
+    if (selectedProvider.value?.is_custom)
+      selectedProvider.value.base_url = String(value);
   },
 });
-
 const apiKey = computed({
-  get: () => selectedProvider.value?.apiKey ?? "",
-  set: (val: string | number) => {
-    if (selectedProvider.value) selectedProvider.value.apiKey = String(val);
+  get: () => selectedProvider.value?.api_key ?? "",
+  set: (value: string | number) => {
+    if (selectedProvider.value)
+      selectedProvider.value.api_key = String(value) || null;
   },
 });
+const error = computed(() => localError.value || configStore.error);
+const statusText = computed(
+  () =>
+    ({
+      idle: "",
+      testing: "Testing...",
+      success: "Connected",
+      failed: "Connection failed",
+    })[connectionStatus.value],
+);
 
-const statusText = computed(() => {
-  switch (connectionStatus.value) {
-    case "testing":
-      return "Testing...";
-    case "success":
-      return "Connected";
-    case "failed":
-      return "Connection failed";
-    default:
-      return "";
+const startEditor = (kind: Editor["kind"], index: number | null = null) => {
+  editor.value = {
+    kind,
+    index,
+    value:
+      index === null
+        ? ""
+        : kind === "provider"
+          ? entries.value[index][1].name
+          : (selectedProvider.value?.models[index] ?? ""),
+  };
+};
+const saveEditor = () => {
+  const draft = editor.value;
+  const name = draft?.value.trim();
+  if (!draft || !name) return;
+  if (draft.kind === "provider") {
+    if (draft.index === null) configStore.createProvider(name);
+    else configStore.renameProvider(draft.index, name);
+  } else configStore.saveModel(draft.index, name);
+  editor.value = null;
+};
+const handleAction = (kind: Editor["kind"], action: SelectorAction) => {
+  localError.value = "";
+  try {
+    switch (action.type) {
+      case "create":
+        startEditor(kind);
+        break;
+      case "edit":
+        startEditor(kind, action.index);
+        break;
+      case "delete":
+        if (kind === "provider") configStore.deleteProvider(action.index);
+        else configStore.deleteModel(action.index);
+        editor.value = null;
+        break;
+      case "save":
+        saveEditor();
+        break;
+      case "cancel":
+        editor.value = null;
+        break;
+    }
+  } catch (cause) {
+    localError.value = cause instanceof Error ? cause.message : String(cause);
   }
-});
-
-watch(providerIndex, () => {
-  modelIndex.value = 0;
+};
+const resetTest = () => {
+  clearTimeout(testTimer);
   connectionStatus.value = "idle";
-  isAddingProvider.value = false;
-  isAddingModel.value = false;
-});
-
-watch(endpoint, () => {
-  connectionStatus.value = "idle";
-});
-
-const createId = (prefix: string) =>
-  `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-
-const confirmAddProvider = () => {
-  const name = newProviderName.value.trim();
-  const ep = newProviderEndpoint.value.trim();
-  if (!name || !ep) return;
-
-  providers.value.push({
-    id: createId("provider"),
-    name,
-    endpoint: ep,
-    apiKey: "",
-    isCustom: true,
-    models: [{ id: createId("model"), name: "default", isCustom: true }],
-  });
-  providerIndex.value = providers.value.length - 1;
-  newProviderName.value = "";
-  newProviderEndpoint.value = "";
-  isAddingProvider.value = false;
 };
-
-const deleteCurrentProvider = () => {
-  if (!selectedProvider.value?.isCustom) return;
-  providers.value.splice(providerIndex.value, 1);
-  providerIndex.value = Math.max(0, providerIndex.value - 1);
-};
-
-const confirmAddModel = () => {
-  const name = newModelName.value.trim();
-  if (!name || !selectedProvider.value) return;
-
-  selectedProvider.value.models.push({
-    id: createId("model"),
-    name,
-    isCustom: true,
-  });
-  modelIndex.value = selectedProvider.value.models.length - 1;
-  newModelName.value = "";
-  isAddingModel.value = false;
-};
-
-const deleteCurrentModel = () => {
-  if (!selectedProvider.value || !selectedModel.value?.isCustom) return;
-  selectedProvider.value.models.splice(modelIndex.value, 1);
-  modelIndex.value = Math.max(0, modelIndex.value - 1);
-};
-
+watch([() => configStore.activeId, endpoint, apiKey, modelIndex], resetTest);
 const testConnection = () => {
-  if (testTimer) clearTimeout(testTimer);
+  clearTimeout(testTimer);
   connectionStatus.value = "testing";
   testTimer = setTimeout(() => {
-    connectionStatus.value =
-      endpoint.value.startsWith("https://") || endpoint.value.startsWith("http://")
-        ? "success"
-        : "failed";
+    connectionStatus.value = /^https?:\/\//.test(endpoint.value)
+      ? "success"
+      : "failed";
   }, 600);
 };
-
-const setKey = () => undefined;
-defineExpose({ setKey });
-
-onUnmounted(() => {
-  if (testTimer) clearTimeout(testTimer);
-});
+onMounted(() => void configStore.initialize());
+onUnmounted(() => clearTimeout(testTimer));
 </script>
 
 <template>
   <div class="api-panel">
     <h2 class="title">API</h2>
-
-    <div class="settings-container custom-scrollbar">
-      <!-- Provider Selector Row -->
-      <div class="field-item">
-        <div class="control-row">
-          <VSelector
-            v-model="providerIndex"
-            class="main-selector"
-            label="Provider"
-            :options="providerNames"
-          />
-          <div class="actions">
-            <VButton
-              :label="isAddingProvider ? 'Cancel' : '+ New'"
-              size="28px"
-              class="action-btn"
-              @click="isAddingProvider = !isAddingProvider"
-            />
-            <VButton
-              v-if="selectedProvider?.isCustom"
-              label="Delete"
-              size="28px"
-              class="action-btn danger"
-              @click="deleteCurrentProvider"
-            />
-          </div>
-        </div>
-
-        <!-- Inline Add Provider Form -->
-        <div
-          v-if="isAddingProvider"
-          class="sub-form"
-        >
-          <VInput
-            v-model="newProviderName"
-            label="Name"
-            placeholder="Provider name"
-            class="sub-input"
-          />
-          <VInput
-            v-model="newProviderEndpoint"
-            label="Endpoint"
-            placeholder="https://api.example.com/v1"
-            class="sub-input"
-          />
-          <VButton
-            label="Save Provider"
-            size="28px"
-            class="confirm-btn"
-            :disabled="!newProviderName.trim() || !newProviderEndpoint.trim()"
-            @click="confirmAddProvider"
-          />
-        </div>
-      </div>
-
-      <!-- Model Selector Row -->
-      <div class="field-item">
-        <div class="control-row">
-          <VSelector
-            v-model="modelIndex"
-            class="main-selector"
-            label="Model"
-            :options="modelNames"
-          />
-          <div class="actions">
-            <VButton
-              :label="isAddingModel ? 'Cancel' : '+ New'"
-              size="28px"
-              class="action-btn"
-              @click="isAddingModel = !isAddingModel"
-            />
-            <VButton
-              v-if="selectedModel?.isCustom"
-              label="Delete"
-              size="28px"
-              class="action-btn danger"
-              @click="deleteCurrentModel"
-            />
-          </div>
-        </div>
-
-        <!-- Inline Add Model Form -->
-        <div
-          v-if="isAddingModel"
-          class="sub-form"
-        >
-          <VInput
-            v-model="newModelName"
-            label="Name"
-            placeholder="Model identifier"
-            class="sub-input"
-          />
-          <VButton
-            label="Save Model"
-            size="28px"
-            class="confirm-btn"
-            :disabled="!newModelName.trim()"
-            @click="confirmAddModel"
-          />
-        </div>
-      </div>
-
-      <!-- Endpoint & API Key -->
+    <p
+      v-if="error"
+      class="error-message"
+      role="alert"
+    >
+      {{ error }}
+    </p>
+    <div
+      class="settings-container custom-scrollbar"
+      :inert="configStore.busy"
+      :aria-busy="configStore.busy"
+    >
+      <VSelector
+        v-model:editor-value="editorValue"
+        :model-value="providerIndex"
+        class="main-selector"
+        label="Provider"
+        :options="providerOptions"
+        creatable
+        show-new-when-empty
+        :editing="editor?.kind === 'provider'"
+        placeholder="Provider name"
+        @update:model-value="configStore.selectProvider"
+        @action="handleAction('provider', $event)"
+      />
+      <VSelector
+        v-model:editor-value="editorValue"
+        :model-value="modelIndex"
+        class="main-selector"
+        label="Model"
+        :options="modelOptions"
+        :creatable="selectedProvider?.is_custom"
+        :show-new-when-empty="selectedProvider?.is_custom"
+        :editing="editor?.kind === 'model'"
+        placeholder="Model identifier"
+        @update:model-value="configStore.selectModel"
+        @action="handleAction('model', $event)"
+      />
       <VInput
         v-model="endpoint"
         label="Endpoint"
+        :disabled="!selectedProvider?.is_custom"
         placeholder="https://api.example.com/v1"
         class="field-input"
       />
       <VInput
         v-model="apiKey"
         label="API Key"
+        :disabled="!selectedProvider"
         placeholder="Enter API key"
         mask-on-blur
         class="field-input"
       />
-
-      <!-- Connection Test -->
       <div class="test-row">
         <VButton
           class="test-btn"
-          :label="connectionStatus === 'testing' ? 'Testing...' : 'Test Connection'"
-          size="30px"
+          :label="
+            connectionStatus === 'testing' ? 'Testing...' : 'Test Connection'
+          "
+          size="1.875rem"
           :disabled="connectionStatus === 'testing'"
           @click="testConnection"
         />
@@ -317,9 +210,8 @@ onUnmounted(() => {
           v-if="statusText"
           class="status-tag"
           :class="`status-${connectionStatus}`"
+          >{{ statusText }}</span
         >
-          {{ statusText }}
-        </span>
       </div>
     </div>
   </div>
@@ -332,116 +224,65 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
 }
-
 .title {
   display: flex;
   height: 16%;
-  min-height: 40px;
+  min-height: 2.5rem;
   font-size: 1.5rem;
   align-items: center;
   justify-content: center;
 }
-
 .settings-container {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 0 4% 12px;
+  gap: clamp(0.5rem, 1.5vh, 1rem);
+  padding: 0 4% clamp(0.5rem, 1vh, 0.75rem);
   overflow-y: auto;
   overscroll-behavior-y: contain;
 }
-
-.field-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.control-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-}
-
 .main-selector {
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
 }
-
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.action-btn {
-  min-width: 58px;
-  font-size: 0.85rem;
-}
-
-.action-btn.danger {
-  color: #a43724;
-}
-
-.sub-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  border-left: 2px solid #0d58a4;
-  background: rgba(13, 88, 164, 0.05);
-}
-
-.sub-input {
-  width: 100%;
-}
-
-.confirm-btn {
-  align-self: flex-end;
-  min-width: 90px;
-}
-
 .field-input {
   width: 100%;
 }
-
 .test-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 2px;
-  padding-bottom: 8px;
+  gap: clamp(0.5rem, 1vw, 0.75rem);
+  margin-top: 0.125rem;
+  padding-bottom: 0.5rem;
 }
-
 .test-btn {
-  min-width: 120px;
+  width: fit-content;
+  min-width: 7.5rem;
+  flex: 0 0 auto;
 }
-
 .status-tag {
   font-size: 0.85rem;
   font-weight: 500;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.03125rem;
 }
-
 .status-testing {
   color: #0d58a4;
 }
-
 .status-success {
   color: #17753b;
 }
-
-.status-failed {
+.status-failed,
+.error-message {
   color: #a43724;
 }
-
+.error-message {
+  margin: 0 4% 0.5rem;
+  font-size: 0.85rem;
+}
 :deep(.base-config-select:first-child .select-dropdown-wrapper) {
   z-index: 20;
 }
-
 :deep(.base-config-select:nth-child(2) .select-dropdown-wrapper) {
   z-index: 19;
 }

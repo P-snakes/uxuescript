@@ -1,44 +1,18 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { computed, onMounted } from "vue";
 import VInput from "@/components/base/VInput.vue";
 import VToggle from "@/components/base/VToggle.vue";
-import { commands, OptionsConfig } from "@/services/cmds.ts";
+import { useConfigStore } from "@/stores/config";
 
-const options = ref<OptionsConfig>();
-
+const configStore = useConfigStore();
+const options = computed(() => configStore.options);
 const speedValue = computed<number>({
-  get() {
-    return options.value?.speedValue ?? 1;
-  },
-  set(val: number) {
-    if (options.value) {
-      options.value.speedValue = val;
-    }
+  get: () => options.value?.speedValue ?? 1,
+  set: (value) => {
+    if (options.value) options.value.speedValue = value;
   },
 });
-
-const setOptions = async () => {
-  if (!options.value) return;
-  try {
-    await commands.setOptions(options.value);
-    console.log("设置课程配置成功:", options.value);
-  } catch (err) {
-    console.error("设置课程配置失败:", err);
-  }
-};
-
-defineExpose({
-  setOptions,
-});
-
-onMounted(async () => {
-  try {
-    const res = await commands.options();
-    options.value = res;
-  } catch (err) {
-    console.error("获取配置失败:", err);
-  }
-});
+onMounted(() => void configStore.initialize());
 </script>
 
 <template>
@@ -71,7 +45,6 @@ onMounted(async () => {
         aria-label=""
         pattern="\d+(?:\.\d*)?"
         class="option speed-input"
-        @change="setOptions"
       />
     </div>
   </div>
@@ -82,17 +55,14 @@ onMounted(async () => {
   height: 100%;
   flex: 1;
   flex-direction: column;
-
   display: flex;
 }
-
 .settings-container {
   flex: 1;
   display: flex;
   gap: 4%;
   flex-direction: column;
 }
-
 .title {
   display: flex;
   height: 20%;
@@ -100,11 +70,9 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
 }
-
 .option {
   height: 22%;
 }
-
 .speed-input :deep(.input-field) {
   text-align: center;
 }
