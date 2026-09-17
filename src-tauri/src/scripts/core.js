@@ -14,7 +14,16 @@
       unfinishedSelector: ":has(.orangeNew)",
     },
     chapter: { tabClass: "div.prev_white" },
-    video: { tag: "video", launchBtnClass: ".vjs-big-play-button" },
+    video: {
+      tag: "video",
+      launchBtnClass: ".vjs-big-play-button",
+      timelineClass: ".ans-timelineobjects",
+      quizClass: ".ans-videoquiz",
+      quizItemClass: ".tkItem",
+      quizOptionClass: ".ans-videoquiz-opt",
+      quizSubmitId: "#videoquiz-submit",
+      quizContinueId: "#videoquiz-continue",
+    },
     pdf: { iframeId: "#panView" },
     quiz: {
       titleClass: ".newZy_TItle",
@@ -370,6 +379,126 @@
     throw new Error(`未识别的任务点类型: ${url}`);
   };
 
+  /**
+   * @typedef {{ answered?: boolean, answerContent?: string, options?: { name?: string }[] }} ExtQuizData
+   * @typedef {{ objects?: { style?: string, datas?: ExtQuizData[] }[] }} ExtTimeline
+   * @typedef {Window & { Ext?: { getCmp?: (id: string) => ExtTimeline | undefined } }} VideoWindow
+   */
+
+  /** @type {(timeline: HTMLElement) => ExtQuizData[]} */
+  const getInteractiveQuizAnswers = (timeline) => {
+    const videoWindow = /** @type {VideoWindow | null} */ (
+      timeline.ownerDocument.defaultView
+    );
+    const datas =
+      videoWindow?.Ext?.getCmp?.(timeline.id)?.objects?.find(
+        ({ style }) => style === "InteractiveQuiz",
+      )?.datas ?? [];
+    return datas.map(({ answered, answerContent, options }) => ({
+      answered,
+      answerContent,
+      options,
+    }));
+  };
+
+  /** @type {(timeline: HTMLElement, videoEl: HTMLMediaElement) => Promise<HTMLElement | null>} */
+  const observeInteractiveQuiz = (timeline, videoEl) =>
+    new Promise((resolve) => {
+      const observer = new MutationObserver(check);
+
+      function check() {
+        const quizRoot = /** @type {HTMLElement | null} */ (
+          timeline.querySelector(SELECTORS.video.quizClass)
+        );
+        if (!quizRoot && !videoEl.ended) return;
+        observer.disconnect();
+        videoEl.removeEventListener("ended", check);
+        resolve(quizRoot);
+      }
+
+      observer.observe(timeline, { childList: true, subtree: true });
+      videoEl.addEventListener("ended", check, { once: true });
+      check();
+    });
+
+  /** @type {(optionNode: HTMLElement) => void} */
+  const clickInteractiveQuizOption = (optionNode) =>
+    optionNode.querySelector("label")?.click();
+
+  /** @type {(quizRoot: HTMLElement, answer: ExtQuizData) => Promise<void>} */
+  const fillInteractiveQuiz = async (quizRoot, answer) => {
+    const optionNodes = await wait.elements(
+      null,
+      SELECTORS.video.quizOptionClass,
+      quizRoot,
+    );
+    const answerNames = new Set(
+      String(answer.answerContent ?? "")
+        .toUpperCase()
+        .match(/[A-Z0-9]/g) ?? [],
+    );
+    for (const input of quizRoot.querySelectorAll("input")) {
+      input.checked = false;
+      input.removeAttribute("checked");
+    }
+    for (const [index, option] of (answer.options ?? []).entries()) {
+      const optionNode = optionNodes[index];
+      if (optionNode && answerNames.has(String(option.name).toUpperCase())) {
+        clickInteractiveQuizOption(optionNode);
+      }
+    }
+  };
+
+  /** @type {(taskDoc: Document, videoEl: HTMLMediaElement) => Promise<void>} */
+  const handleInteractiveQuiz = async (taskDoc, videoEl) => {
+    const timeline = await wait.element(
+      null,
+      SELECTORS.video.timelineClass,
+      taskDoc,
+    );
+    const answers = await wait.until(() => {
+      const result = getInteractiveQuizAnswers(timeline);
+      return result.length ? result : null;
+    });
+    if (!answers || answers.every((answer) => answer.answered)) return;
+
+    const quizRoot = await observeInteractiveQuiz(timeline, videoEl);
+    if (!quizRoot) return;
+
+    const quizItems = await wait.elements(
+      null,
+      SELECTORS.video.quizItemClass,
+      quizRoot,
+    );
+
+    for (const [index, answer] of answers.entries()) {
+      if (!answer.answered && quizItems[index])
+        await fillInteractiveQuiz(quizItems[index], answer);
+    }
+
+    const submitButton = await wait.element(
+      null,
+      SELECTORS.video.quizSubmitId,
+      quizRoot,
+    );
+    submitButton.click();
+
+    const continueButton = await wait.element(
+      null,
+      SELECTORS.video.quizContinueId,
+      quizRoot,
+    );
+    await wait.until(() => {
+      if (
+        quizRoot.ownerDocument.defaultView?.getComputedStyle(continueButton)
+          .display === "none"
+      )
+        return null;
+      continueButton.click();
+      return true;
+    });
+  };
+
   /** @type {(taskDoc: Document) => Promise<void>} */
   const handleVideo = async (taskDoc) => {
     console.info("开始处理Video任务点");
@@ -397,15 +526,17 @@
     if (!isStarted) throw new Error("视频多次尝试无法启动播放");
 
     if (config.lockingSpeed) applySpeed(videoEl, config.videoSpeedValue);
+    await handleInteractiveQuiz(taskDoc, videoEl);
     console.info("Video任务点处理完成");
 
     if (config.debugTaskTypes.includes("Video")) {
-      assert(
-        confirm(
-          "[DEBUG] Video 任务点处理完成。点击 [确定] 继续，点击 [取消] 中断。",
-        ),
-        "调试中断：用户取消了 Video 任务点",
-      );
+      // assert(
+      //   confirm(
+      //     "[DEBUG] Video 任务点处理完成。点击 [确定] 继续，点击 [取消] 中断。",
+      //   ),
+      //   "调试中断：用户取消了 Video 任务点",
+      // );
+      await sleep(5000);
     }
   };
 
@@ -738,8 +869,8 @@
     // 1. 清理已有内联监听属性 (DOM Level 0)
     for (const evt of blockedEvents) {
       try {
-        (/** @type {any} */ (window))[`on${evt}`] = null;
-        (/** @type {any} */ (document))[`on${evt}`] = null;
+        /** @type {any} */ (window)[`on${evt}`] = null;
+        /** @type {any} */ (document)[`on${evt}`] = null;
       } catch (e) {
         console.error(`清理 ${evt} 事件监听失败:`, e);
       }
