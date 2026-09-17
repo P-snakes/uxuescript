@@ -17,7 +17,7 @@
         "show_type_hints": false,
       },
     },
-    "Vue": {
+    "Vue.js": {
       "inlay_hints": {
         "show_type_hints": false,
       },
