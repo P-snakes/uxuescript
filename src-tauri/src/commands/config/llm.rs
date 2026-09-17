@@ -9,9 +9,12 @@ use crate::config::{llm::LLMProvider, CONFIG};
 #[specta::specta]
 pub fn providers() -> Vec<LLMProvider> {
     log::debug!("正在获取可用 AI Provider 列表...");
-    let providers_map = CONFIG.llm.providers.lock();
-    let mut providers: Vec<LLMProvider> = providers_map.values().cloned().collect();
-    providers.sort_by_key(|p| p.name.clone());
+    let mut providers: Vec<LLMProvider> = CONFIG.llm.providers.lock().values().cloned().collect();
+    providers.sort_by(|left, right| {
+        left.is_custom
+            .cmp(&right.is_custom)
+            .then_with(|| left.name.cmp(&right.name))
+    });
     log::info!("成功获取 AI Provider 列表: {:?}", providers);
     providers
 }
@@ -35,6 +38,11 @@ pub fn upsert_provider(mut provider: LLMProvider) -> CommandsResult<()> {
     }
     if !provider.is_custom {
         return Err(anyhow::anyhow!("只能新增或更新自定义 AI Provider").into());
+    }
+    if let Some(api_key) = provider.api_key.take() {
+        provider.api_key = Some(crate::config::llm::ApiKey::new(
+            api_key.expose().to_owned(),
+        )?);
     }
 
     let mut providers = CONFIG.llm.providers.lock();
@@ -61,10 +69,6 @@ pub fn remove_provider(name: String) -> CommandsResult<()> {
     let name = name.trim().to_owned();
     if name.is_empty() {
         return Err(anyhow::anyhow!("AI Provider 名称不能为空").into());
-    }
-
-    if *CONFIG.llm.active_provider.lock() == name {
-        return Err(anyhow::anyhow!("当前正在使用的 AI Provider 不允许移除").into());
     }
 
     let mut providers = CONFIG.llm.providers.lock();
@@ -95,73 +99,34 @@ pub fn switch_provider(name: String) -> CommandsResult<()> {
     }
 }
 
-/// 获取当前大语言模型提供商所支持的全部模型列表。
-#[tauri::command]
-#[specta::specta]
-pub async fn models() -> Vec<String> {
-    let active_id = CONFIG.llm.active_provider.lock().clone();
-
-    if active_id == "ollama" {
-        if let Err(error) = ollama::fetch_ollama_models().await {
-            log::warn!("Ollama 模型刷新失败: {}", error);
-        }
-    }
-
-    let providers = CONFIG.llm.providers.lock();
-    providers
-        .get(&active_id)
-        .map(|provider| provider.models.clone())
-        .unwrap_or_default()
-}
-
-/// 获取当前大语言模型提供商正在使用的具体模型名称。
-#[tauri::command]
-#[specta::specta]
-pub fn current_model() -> String {
-    let active_id = CONFIG.llm.active_provider.lock();
-    let providers = CONFIG.llm.providers.lock();
-    let model = providers
-        .get(&*active_id)
-        .and_then(|p| p.chosen_model.and_then(|idx| p.models.get(idx)))
-        .map(|s| s.as_str())
-        .unwrap_or_default()
-        .to_string();
-    log::debug!("正在获取当前模型: {}", model);
-    model
-}
-
 /// 将当前大语言模型提供商的选用模型切换为指定模型。
 #[tauri::command]
 #[specta::specta]
-pub fn switch_model(model: String) {
-    log::debug!("正在切换模型到 [{}]...", model);
+pub fn switch_model(index: u32) {
     let active_id = CONFIG.llm.active_provider.lock();
     let mut providers = CONFIG.llm.providers.lock();
     if let Some(p) = providers.get_mut(&*active_id) {
-        if let Some(pos) = p.models.iter().position(|m| m == &model) {
-            p.chosen_model = Some(pos);
+        let index = index as usize;
+        if let Some(model) = p.models.get(index) {
+            p.chosen_model_index = Some(index);
+            log::info!(
+                "AI Provider [{}] 已切换至模型 [{}]（索引：{}）",
+                p.name,
+                model,
+                index
+            );
+        } else {
+            p.chosen_model_index = None;
+            log::warn!(
+                "无法切换 AI Provider [{}] 的模型：索引 [{}] 超出 {} 个模型的范围，已清空模型选择",
+                p.name,
+                index,
+                p.models.len()
+            );
         }
-    }
-    log::info!("成功切换模型到 [{}]", model);
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn api_key() -> String {
-    log::debug!("正在获取当前 API Key...");
-    let active_id = CONFIG.llm.active_provider.lock();
-    let providers = CONFIG.llm.providers.lock();
-    let key = providers
-        .get(&*active_id)
-        .and_then(|p| p.api_key.as_ref())
-        .map(|key| key.expose().to_owned())
-        .unwrap_or_default();
-    if let Some(key) = providers.get(&*active_id).and_then(|p| p.api_key.as_ref()) {
-        log::debug!("成功获取当前 API Key: {}", key);
     } else {
-        log::debug!("当前 API Key 未设置");
+        log::warn!("当前 AI Provider [{}] 不存在，无法切换模型", *active_id);
     }
-    key
 }
 
 /// 设置当前大语言模型提供商的 API 密钥。

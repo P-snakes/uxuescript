@@ -21,7 +21,7 @@ pub async fn fetch_ollama_models() -> CommandsResult<()> {
     let mut providers = CONFIG.llm.providers.lock();
     if let Some(p) = providers.get_mut("ollama") {
         p.models = models;
-        p.chosen_model = Some(0);
+        p.chosen_model_index = Some(0);
     }
     log::info!("Ollama 模型列表更新完成");
     Ok(())

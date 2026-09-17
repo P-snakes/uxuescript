@@ -38,7 +38,12 @@ impl ApiKey {
 
 impl fmt::Display for ApiKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}****{}", &self.0[..4], &self.0[self.0.len() - 4..],)
+        let buffer = if self.0.len() < 12 {
+            String::from("************")
+        } else {
+            format!("{}****{}", &self.0[..4], &self.0[self.0.len() - 4..])
+        };
+        write!(f, "{}", buffer)
     }
 }
 
@@ -58,6 +63,7 @@ pub enum LLMProtocol {
 
 /// 统一的大模型提供商结构体（内置与用户自定义提供商通用纯数据 DTO）
 #[derive(Serialize, Deserialize, Debug, Clone, Type)]
+#[serde(rename_all = "camelCase")]
 pub struct LLMProvider {
     pub name: String,            // 提供商显示名称 (如 "DeepSeek 官方", "我的私有中转站")
     pub is_custom: bool,         // 是否为用户自定义的提供商
@@ -66,7 +72,7 @@ pub struct LLMProvider {
     pub api_key: Option<ApiKey>, // API Key (Option 允许免 Key / 未配置)
     pub models: Vec<String>,     // 支持的模型列表
     #[specta(type = Option<u32>)]
-    pub chosen_model: Option<usize>, // 当前选择的模型在 models 列表中的索引
+    pub chosen_model_index: Option<usize>, // 当前选择的模型在 models 列表中的索引
     #[serde(default)]
     #[specta(skip)]
     pub extra_body: Option<serde_json::Value>, // 协议特定额外 Body 参数 (如 temperature, stream)
@@ -162,7 +168,7 @@ mod tests {
                 id
             );
             let chosen_idx = provider
-                .chosen_model
+                .chosen_model_index
                 .unwrap_or_else(|| panic!("提供商 {} 必须有默认选中的模型索引", id));
             assert!(
                 chosen_idx < provider.models.len(),
@@ -172,5 +178,22 @@ mod tests {
                 provider.models.len()
             );
         }
+    }
+
+    #[test]
+    fn test_llm_provider_uses_camel_case_serialization() {
+        let provider = LLMConfig::default()
+            .providers
+            .lock()
+            .get("bigmodel")
+            .cloned()
+            .unwrap();
+
+        let value = serde_json::to_value(provider).unwrap();
+        assert!(value.get("isCustom").is_some());
+        assert!(value.get("baseUrl").is_some());
+        assert!(value.get("apiKey").is_some());
+        assert!(value.get("chosenModel").is_some());
+        assert!(value.get("is_custom").is_none());
     }
 }
