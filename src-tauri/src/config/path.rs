@@ -13,7 +13,7 @@ fn app_identifier() -> String {
         .identifier
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, specta::Type)]
 #[serde(default)]
 pub struct PathsConfig {
     pub dirs: HashMap<String, PathBuf>,

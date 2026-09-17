@@ -2,7 +2,7 @@ pub mod llm;
 
 use super::CommandsResult;
 
-use crate::config::{metadata::MetadataConfig, options::OptionsConfig, CONFIG};
+use crate::config::{metadata::MetadataConfig, options::OptionsConfig, path::PathsConfig, CONFIG};
 
 /// 获取包含版本及作者信息的应用元数据。
 #[tauri::command]
@@ -39,4 +39,13 @@ pub fn save_config() -> CommandsResult<()> {
     CONFIG.save()?;
     log::info!("成功保存配置文件");
     Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn paths() -> PathsConfig {
+    log::debug!("正在获取路径配置...");
+    let paths = CONFIG.paths.clone();
+    log::info!("成功获取路径配置: {:?}", paths);
+    paths
 }

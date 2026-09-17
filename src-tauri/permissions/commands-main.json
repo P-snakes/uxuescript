@@ -18,6 +18,7 @@
           "metadata",
           "minimize",
           "options",
+          "paths",
           "providers",
           "query_course_meta",
           "reload",

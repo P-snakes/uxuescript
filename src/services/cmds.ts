@@ -11,6 +11,8 @@ export const commands = {
 	cover: string,
 } | null>("query_course_meta", { courseId }),
 	sendStatus: (status: CourseStatus) => __TAURI_INVOKE<null>("send_status", { status }),
+	/**  从本地 Ollama 服务拉取可用模型列表更新至内存配置。 */
+	fetchOllamaModels: () => __TAURI_INVOKE<null>("fetch_ollama_models"),
 	/**  获取当前可用的全部大语言模型提供商列表。 */
 	providers: () => __TAURI_INVOKE<LLMProvider[]>("providers"),
 	/**  获取当前选中的大语言模型提供商。 */
@@ -25,18 +27,13 @@ export const commands = {
 	switchModel: (index: number) => __TAURI_INVOKE<void>("switch_model", { index }),
 	/**  设置当前大语言模型提供商的 API 密钥。 */
 	setKey: (key: string) => __TAURI_INVOKE<null>("set_key", { key }),
-	/**  从本地 Ollama 服务拉取可用模型列表更新至内存配置。 */
-	fetchOllamaModels: () => __TAURI_INVOKE<null>("fetch_ollama_models"),
 	/**  获取包含版本及作者信息的应用元数据。 */
 	metadata: () => __TAURI_INVOKE<MetadataConfig>("metadata"),
 	options: () => __TAURI_INVOKE<OptionsConfig>("options"),
 	setOptions: (options: OptionsConfig) => __TAURI_INVOKE<void>("set_options", { options }),
 	/**  将内存中的全局配置持久化保存至本地文件。 */
 	saveConfig: () => __TAURI_INVOKE<null>("save_config"),
-	/**  带有渐隐过渡效果的应用窗口关闭指令。 */
-	close: () => __TAURI_INVOKE<void>("close"),
-	/**  应用窗口最小化处理指令。 */
-	minimize: () => __TAURI_INVOKE<void>("minimize"),
+	paths: () => __TAURI_INVOKE<PathsConfig>("paths"),
 	/**  显示主窗口并启动遮罩开屏动画。 */
 	startMask: () => __TAURI_INVOKE<null>("start_mask"),
 	/**  显示已在后台加载完成的主界面和超星 Webview。 */
@@ -51,6 +48,10 @@ export const commands = {
 	goForward: () => __TAURI_INVOKE<null>("go_forward"),
 	currentUrl: () => __TAURI_INVOKE<string | null>("current_url"),
 	reload: () => __TAURI_INVOKE<null>("reload"),
+	/**  带有渐隐过渡效果的应用窗口关闭指令。 */
+	close: () => __TAURI_INVOKE<void>("close"),
+	/**  应用窗口最小化处理指令。 */
+	minimize: () => __TAURI_INVOKE<void>("minimize"),
 };
 
 /* Types */
@@ -129,6 +130,11 @@ export type OptionsConfig = {
 	muteWebview?: boolean,
 	speedLock?: boolean,
 	speedValue?: number | null,
+};
+
+export type PathsConfig = {
+	dirs?: { [key in string]: string },
+	files?: { [key in string]: string },
 };
 
 export type TabProgressPayload = {
