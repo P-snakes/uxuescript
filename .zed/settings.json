@@ -7,6 +7,21 @@
     "enabled": true,
   },
   "languages": {
+    "JavaScript": {
+      "inlay_hints": {
+        "show_type_hints": false,
+      },
+    },
+    "TypeScript": {
+      "inlay_hints": {
+        "show_type_hints": false,
+      },
+    },
+    "Vue": {
+      "inlay_hints": {
+        "show_type_hints": false,
+      },
+    },
     "Rust": {
       "formatter": "language_server",
       "inlay_hints": {
