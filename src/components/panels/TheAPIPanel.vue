@@ -42,10 +42,11 @@ onMounted(async () => {
     commands.providers(),
     commands.currentProvider(),
   ]);
-  providers.value = fetchedProviders;
+  const providerNames = fetchedProviders.map((provider) => provider.name);
+  providers.value = providerNames;
 
-  const targetProviderIndex = fetchedProviders.includes(currentProvider)
-    ? fetchedProviders.indexOf(currentProvider)
+  const targetProviderIndex = providerNames.includes(currentProvider)
+    ? providerNames.indexOf(currentProvider)
     : 0;
   if (provider.value === targetProviderIndex) {
     await loadProvider();
