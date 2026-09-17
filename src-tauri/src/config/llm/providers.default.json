@@ -1,9 +1,10 @@
 {
   "bigmodel": {
     "name": "BigModel",
+    "isCustom": false,
     "protocol": "OpenAIChatCompletions",
-    "base_url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-    "api_key": null,
+    "baseUrl": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "apiKey": null,
     "models": [
       "glm-4.7-flash",
       "glm-4.7",
@@ -12,8 +13,8 @@
       "glm-5.1",
       "glim-5.2"
     ],
-    "chosen_model": 0,
-    "extra_body": {
+    "chosenModel": 0,
+    "extraBody": {
       "temperature": 0.7,
       "top_p": 0.95,
       "response_format": { "type": "json_object" }
@@ -21,15 +22,13 @@
   },
   "deepseek": {
     "name": "DeepSeek",
+    "isCustom": false,
     "protocol": "OpenAIChatCompletions",
-    "base_url": "https://api.deepseek.com/chat/completions",
-    "api_key": null,
-    "models": [
-      "deepseek-v4-flash",
-      "deepseek-v4-pro"
-    ],
-    "chosen_model": 0,
-    "extra_body": {
+    "baseUrl": "https://api.deepseek.com/chat/completions",
+    "apiKey": null,
+    "models": ["deepseek-v4-flash", "deepseek-v4-pro"],
+    "chosenModel": 0,
+    "extraBody": {
       "temperature": 0.7,
       "top_p": 0.95,
       "response_format": { "type": "json_object" }
@@ -37,9 +36,10 @@
   },
   "google": {
     "name": "Google",
+    "isCustom": false,
     "protocol": "GoogleGemini",
-    "base_url": "https://generativelanguage.googleapis.com/v1beta/models",
-    "api_key": null,
+    "baseUrl": "https://generativelanguage.googleapis.com/v1beta/models",
+    "apiKey": null,
     "models": [
       "gemini-3.5-flash-lite",
       "gemini-3.6-flash",
@@ -49,58 +49,52 @@
       "gemini-pro-latest",
       "gemma-4-31b-it"
     ],
-    "chosen_model": 0,
-    "extra_body": null
+    "chosenModel": 0,
+    "extraBody": null
   },
   "moonshot": {
     "name": "Moonshot",
+    "isCustom": false,
     "protocol": "OpenAIChatCompletions",
-    "base_url": "https://api.moonshot.cn/v1/chat/completions",
-    "api_key": null,
-    "models": [
-      "moonshot-v1-8k",
-      "kimi-k2.6",
-      "kimi-k2.5",
-      "kimi-k3"
-    ],
-    "chosen_model": 0,
-    "extra_body": null
+    "baseUrl": "https://api.moonshot.cn/v1/chat/completions",
+    "apiKey": null,
+    "models": ["moonshot-v1-8k", "kimi-k2.6", "kimi-k2.5", "kimi-k3"],
+    "chosenModel": 0,
+    "extraBody": null
   },
   "openai": {
     "name": "OpenAI",
+    "isCustom": false,
     "protocol": "OpenAIResponses",
-    "base_url": "https://api.openai.com/v1/responses",
-    "api_key": null,
-    "models": [
-      "gpt-5.6-luna",
-      "gpt-5.6-terra",
-      "gpt-5.4-mini",
-      "gpt-5.4"
-    ],
-    "chosen_model": 0,
-    "extra_body": null
+    "baseUrl": "https://api.openai.com/v1/responses",
+    "apiKey": null,
+    "models": ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.4-mini", "gpt-5.4"],
+    "chosenModel": 0,
+    "extraBody": null
   },
   "openrouter": {
     "name": "OpenRouter",
+    "isCustom": false,
     "protocol": "OpenAIChatCompletions",
-    "base_url": "https://openrouter.ai/api/v1/chat/completions",
-    "api_key": null,
+    "baseUrl": "https://openrouter.ai/api/v1/chat/completions",
+    "apiKey": null,
     "models": [
       "poolside/laguna-xs-2.1:free",
       "nvidia/nemotron-3-super-120b-a12b:free",
       "google/gemma-4-31b-it:free"
     ],
-    "chosen_model": 0,
-    "extra_body": null
+    "chosenModel": 0,
+    "extraBody": null
   },
   "ollama": {
     "name": "Ollama",
+    "isCustom": false,
     "protocol": "OpenAIChatCompletions",
-    "base_url": "http://localhost:11434/api/chat",
-    "api_key": null,
+    "baseUrl": "http://localhost:11434/api/chat",
+    "apiKey": null,
     "models": [],
-    "chosen_model": null,
-    "extra_body": {
+    "chosenModel": null,
+    "extraBody": {
       "stream": false
     }
   }

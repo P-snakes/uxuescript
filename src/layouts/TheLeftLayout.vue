@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import TheConfigLayout from "./TheConfigLayout.vue";
+import TheConfigPanel from "@/components/TheConfigPanel.vue";
 import TheInfoPanel from "@/components/panels/TheInfoPanel.vue";
 </script>
 
 <template>
   <div class="left-container">
     <TheInfoPanel class="info-panel" />
-    <TheConfigLayout class="config-panel" />
+    <TheConfigPanel class="config-panel" />
   </div>
 </template>
 

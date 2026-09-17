@@ -4,11 +4,9 @@
     {
       "commands": {
         "allow": [
-          "api_key",
           "can_go_back",
           "can_go_forward",
           "close",
-          "current_model",
           "current_provider",
           "current_url",
           "fetch_ollama_models",
@@ -19,11 +17,12 @@
           "insert_course_meta_map",
           "metadata",
           "minimize",
-          "models",
           "options",
+          "paths",
           "providers",
           "query_course_meta",
           "reload",
+          "remove_provider",
           "save_config",
           "send_status",
           "set_key",
@@ -33,7 +32,8 @@
           "solve_quiz",
           "start_mask",
           "switch_model",
-          "switch_provider"
+          "switch_provider",
+          "upsert_provider"
         ],
         "deny": []
       },

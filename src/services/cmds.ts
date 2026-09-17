@@ -11,29 +11,29 @@ export const commands = {
 	cover: string,
 } | null>("query_course_meta", { courseId }),
 	sendStatus: (status: CourseStatus) => __TAURI_INVOKE<null>("send_status", { status }),
+	/**  从本地 Ollama 服务拉取可用模型列表更新至内存配置。 */
+	fetchOllamaModels: () => __TAURI_INVOKE<null>("fetch_ollama_models"),
+	/**  获取当前可用的全部大语言模型提供商列表。 */
+	providers: () => __TAURI_INVOKE<LLMProvider[]>("providers"),
+	/**  获取当前选中的大语言模型提供商。 */
+	currentProvider: () => __TAURI_INVOKE<string>("current_provider"),
+	/**  新增或更新一个自定义大语言模型提供商。 */
+	upsertProvider: (provider: LLMProvider) => __TAURI_INVOKE<null>("upsert_provider", { provider }),
+	/**  移除一个自定义大语言模型提供商。 */
+	removeProvider: (name: string) => __TAURI_INVOKE<null>("remove_provider", { name }),
+	/**  将当前大语言模型提供商切换为指定提供商。 */
+	switchProvider: (name: string) => __TAURI_INVOKE<null>("switch_provider", { name }),
+	/**  将当前大语言模型提供商的选用模型切换为指定模型。 */
+	switchModel: (index: number) => __TAURI_INVOKE<void>("switch_model", { index }),
+	/**  设置当前大语言模型提供商的 API 密钥。 */
+	setKey: (key: string) => __TAURI_INVOKE<null>("set_key", { key }),
 	/**  获取包含版本及作者信息的应用元数据。 */
 	metadata: () => __TAURI_INVOKE<MetadataConfig>("metadata"),
 	options: () => __TAURI_INVOKE<OptionsConfig>("options"),
 	setOptions: (options: OptionsConfig) => __TAURI_INVOKE<void>("set_options", { options }),
-	/**  获取当前可用的全部大语言模型提供商列表。 */
-	providers: () => __TAURI_INVOKE<string[]>("providers"),
-	/**  获取当前选中的大语言模型提供商。 */
-	currentProvider: () => __TAURI_INVOKE<string>("current_provider"),
-	/**  将当前大语言模型提供商切换为指定提供商。 */
-	switchProvider: (provider: string) => __TAURI_INVOKE<null>("switch_provider", { provider }),
-	/**  从本地 Ollama 服务拉取可用模型列表更新至内存配置。 */
-	fetchOllamaModels: () => __TAURI_INVOKE<null>("fetch_ollama_models"),
-	/**  获取当前大语言模型提供商所支持的全部模型列表。 */
-	models: () => __TAURI_INVOKE<string[]>("models"),
-	/**  获取当前大语言模型提供商正在使用的具体模型名称。 */
-	currentModel: () => __TAURI_INVOKE<string>("current_model"),
-	/**  将当前大语言模型提供商的选用模型切换为指定模型。 */
-	switchModel: (model: string) => __TAURI_INVOKE<void>("switch_model", { model }),
-	apiKey: () => __TAURI_INVOKE<string>("api_key"),
-	/**  设置当前大语言模型提供商的 API 密钥。 */
-	setKey: (key: string) => __TAURI_INVOKE<null>("set_key", { key }),
 	/**  将内存中的全局配置持久化保存至本地文件。 */
 	saveConfig: () => __TAURI_INVOKE<null>("save_config"),
+	paths: () => __TAURI_INVOKE<PathsConfig>("paths"),
 	/**  显示主窗口并启动遮罩开屏动画。 */
 	startMask: () => __TAURI_INVOKE<null>("start_mask"),
 	/**  显示已在后台加载完成的主界面和超星 Webview。 */
@@ -81,6 +81,14 @@ export type AnswerItem_Serialize = {
 	content: string,
 };
 
+/**
+ *  API 密钥。
+ * 
+ *  序列化时保持原始字符串格式，以兼容现有配置文件；格式化输出始终脱敏，
+ *  防止在日志中直接打印密钥明文。
+ */
+export type ApiKey = string;
+
 export type ChapterProgressPayload = {
 	title: string,
 	index: number,
@@ -95,6 +103,20 @@ export type CourseMetadata = {
 
 export type CourseStatus = { kind: "waiting"; payload: null } | { kind: "start"; payload: null } | { kind: "chapter"; payload: ChapterProgressPayload } | { kind: "tab"; payload: TabProgressPayload } | { kind: "task"; payload: TaskProgressPayload } | { kind: "cancel"; payload: null } | { kind: "finish"; payload: null };
 
+/**  支持的大模型 API 发包协议族 */
+export type LLMProtocol = "OpenAIChatCompletions" | "OpenAIResponses" | "GoogleGemini";
+
+/**  统一的大模型提供商结构体（内置与用户自定义提供商通用纯数据 DTO） */
+export type LLMProvider = {
+	name: string,
+	isCustom: boolean,
+	protocol: LLMProtocol,
+	baseUrl: string,
+	apiKey: ApiKey | null,
+	models: string[],
+	chosenModel: number | null,
+};
+
 export type MetadataConfig = {
 	author?: string,
 	title?: string,
@@ -108,6 +130,11 @@ export type OptionsConfig = {
 	muteWebview?: boolean,
 	speedLock?: boolean,
 	speedValue?: number | null,
+};
+
+export type PathsConfig = {
+	dirs?: { [key in string]: string },
+	files?: { [key in string]: string },
 };
 
 export type TabProgressPayload = {

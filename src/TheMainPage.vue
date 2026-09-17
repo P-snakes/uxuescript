@@ -27,13 +27,18 @@ globalThis.addEventListener("keydown", (e) => {
   box-sizing: border-box;
 }
 
-html,
-body,
-#app {
+html {
   width: 100%;
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
+}
+
+body,
+#main {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 @font-face {

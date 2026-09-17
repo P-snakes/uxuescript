@@ -18,6 +18,74 @@ struct CommandVisitor {
     commands: Vec<CommandEntry>,
 }
 
+fn collect_project_commands() -> (Vec<CommandEntry>, Vec<String>, String) {
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+    let manifest_path = PathBuf::from(&manifest_dir);
+    let commands_dir = manifest_path.join("src").join("commands");
+    let perm_file = manifest_path.join("permissions").join("commands-main.json");
+
+    let mut commands = Vec::new();
+    let mut tracked_files = Vec::new();
+
+    if commands_dir.exists() {
+        for entry in WalkDir::new(&commands_dir)
+            .into_iter()
+            .filter_map(|entry| entry.ok())
+        {
+            let path = entry.path();
+            if !path.is_file() || path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
+                continue;
+            }
+
+            tracked_files.push(path.to_string_lossy().into_owned());
+            let relative = match path.strip_prefix(&commands_dir) {
+                Ok(relative) => relative.with_extension(""),
+                Err(_) => continue,
+            };
+            let components: Vec<&str> = relative
+                .components()
+                .filter_map(|component| component.as_os_str().to_str())
+                .collect();
+            if components.is_empty() {
+                continue;
+            }
+
+            let content = fs::read_to_string(path).expect("auto_handler: failed to read file");
+            let syntax_tree = syn::parse_file(&content).expect("auto_handler: failed to parse file");
+            let mut visitor = CommandVisitor {
+                module_name: components.join("::"),
+                commands: Vec::new(),
+            };
+            visitor.visit_file(&syntax_tree);
+            commands.extend(visitor.commands);
+        }
+    }
+
+    let mut names: Vec<String> = commands.iter().map(|command| command.name.clone()).collect();
+    names.sort();
+    names.dedup();
+    if let Ok(content) = fs::read_to_string(&perm_file) {
+        if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(allow) = json.pointer_mut("/permission/0/commands/allow") {
+                *allow = serde_json::json!(names);
+                if let Ok(updated) = serde_json::to_string_pretty(&json) {
+                    if updated != content {
+                        let _ = fs::write(&perm_file, updated);
+                    }
+                }
+            }
+        }
+    }
+
+    let bindings_path = manifest_path
+        .parent()
+        .unwrap_or(&manifest_path)
+        .join("src/services/cmds.ts")
+        .to_string_lossy()
+        .into_owned();
+    (commands, tracked_files, bindings_path)
+}
+
 impl<'ast> Visit<'ast> for CommandVisitor {
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         let is_command = node.attrs.iter().any(|attr| {
@@ -59,75 +127,7 @@ impl<'ast> Visit<'ast> for CommandVisitor {
 
 #[proc_macro]
 pub fn register(_: TokenStream) -> TokenStream {
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let manifest_path = PathBuf::from(&manifest_dir);
-
-    let commands_dir = manifest_path.join("src").join("commands");
-    let perm_file = manifest_path.join("permissions").join("commands-main.json");
-
-    let mut commands: Vec<CommandEntry> = Vec::new();
-    let mut tracked_files = Vec::new();
-
-    if commands_dir.exists() {
-        for entry in WalkDir::new(&commands_dir)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            let path = entry.path();
-            if !path.is_file() || path.extension().and_then(|s| s.to_str()) != Some("rs") {
-                continue;
-            }
-
-            tracked_files.push(path.to_string_lossy().into_owned());
-
-            let relative = match path.strip_prefix(&commands_dir) {
-                Ok(r) => r.with_extension(""),
-                Err(_) => continue,
-            };
-
-            let components: Vec<&str> = relative
-                .components()
-                .filter_map(|c| c.as_os_str().to_str())
-                .collect();
-
-            if components.is_empty() {
-                continue;
-            }
-
-            let module_name = components.join("::");
-
-            let content = fs::read_to_string(path).expect("auto_handler: failed to read file");
-            let syntax_tree =
-                syn::parse_file(&content).expect("auto_handler: failed to parse file");
-
-            let mut visitor = CommandVisitor {
-                module_name,
-                commands: Vec::new(),
-            };
-            visitor.visit_file(&syntax_tree);
-
-            commands.extend(visitor.commands);
-        }
-    }
-
-    let mut all_command_names: Vec<String> = commands.iter().map(|c| c.name.clone()).collect();
-    all_command_names.sort();
-    all_command_names.dedup();
-
-    if perm_file.exists() {
-        if let Ok(content) = fs::read_to_string(&perm_file) {
-            if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(&content) {
-                if let Some(allow) = json.pointer_mut("/permission/0/commands/allow") {
-                    *allow = serde_json::json!(all_command_names);
-                    if let Ok(new_content) = serde_json::to_string_pretty(&json) {
-                        if new_content != content {
-                            let _ = fs::write(&perm_file, new_content);
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let (commands, tracked_files, _) = collect_project_commands();
 
     let all_command_tokens: Vec<_> = commands
         .iter()
@@ -138,6 +138,21 @@ pub fn register(_: TokenStream) -> TokenStream {
         })
         .collect();
 
+    let expanded = quote! {
+        {
+            #( const _: &[u8] = include_bytes!(#tracked_files); )*
+            tauri::generate_handler![
+                #(#all_command_tokens),*
+            ]
+        }
+    };
+
+    expanded.into()
+}
+
+#[proc_macro]
+pub fn sync_bindings(_: TokenStream) -> TokenStream {
+    let (commands, tracked_files, bindings_path) = collect_project_commands();
     let specta_command_tokens: Vec<_> = commands
         .iter()
         .filter(|c| c.is_specta)
@@ -151,22 +166,16 @@ pub fn register(_: TokenStream) -> TokenStream {
     let expanded = quote! {
         {
             #( const _: &[u8] = include_bytes!(#tracked_files); )*
-            #[cfg(debug_assertions)]
-            {
-                tauri_specta::Builder::<tauri::Wry>::new()
-                    .error_handling(tauri_specta::ErrorHandlingMode::Throw)
-                    .commands(tauri_specta::collect_commands![
-                        #(#specta_command_tokens),*
-                    ])
-                    .export(
-                        specta_typescript::Typescript::default(),
-                        "../src/services/cmds.ts",
-                    )
-                    .expect("auto_handler: failed to export typescript bindings");
-            }
-            tauri::generate_handler![
-                #(#all_command_tokens),*
-            ]
+            tauri_specta::Builder::<tauri::Wry>::new()
+                .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+                .commands(tauri_specta::collect_commands![
+                    #(#specta_command_tokens),*
+                ])
+                .export(
+                    specta_typescript::Typescript::default(),
+                    #bindings_path,
+                )
+                .expect("sync_bindings: failed to export TypeScript bindings");
         }
     };
 
