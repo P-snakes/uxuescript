@@ -24,6 +24,7 @@
           "providers",
           "query_course_meta",
           "reload",
+          "remove_provider",
           "save_config",
           "send_status",
           "set_key",
@@ -33,7 +34,8 @@
           "solve_quiz",
           "start_mask",
           "switch_model",
-          "switch_provider"
+          "switch_provider",
+          "upsert_provider"
         ],
         "deny": []
       },

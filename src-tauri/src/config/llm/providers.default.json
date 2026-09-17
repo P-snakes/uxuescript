@@ -1,6 +1,7 @@
 {
   "bigmodel": {
     "name": "BigModel",
+    "is_custom": false,
     "protocol": "OpenAIChatCompletions",
     "base_url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
     "api_key": null,
@@ -21,13 +22,11 @@
   },
   "deepseek": {
     "name": "DeepSeek",
+    "is_custom": false,
     "protocol": "OpenAIChatCompletions",
     "base_url": "https://api.deepseek.com/chat/completions",
     "api_key": null,
-    "models": [
-      "deepseek-v4-flash",
-      "deepseek-v4-pro"
-    ],
+    "models": ["deepseek-v4-flash", "deepseek-v4-pro"],
     "chosen_model": 0,
     "extra_body": {
       "temperature": 0.7,
@@ -37,6 +36,7 @@
   },
   "google": {
     "name": "Google",
+    "is_custom": false,
     "protocol": "GoogleGemini",
     "base_url": "https://generativelanguage.googleapis.com/v1beta/models",
     "api_key": null,
@@ -54,34 +54,27 @@
   },
   "moonshot": {
     "name": "Moonshot",
+    "is_custom": false,
     "protocol": "OpenAIChatCompletions",
     "base_url": "https://api.moonshot.cn/v1/chat/completions",
     "api_key": null,
-    "models": [
-      "moonshot-v1-8k",
-      "kimi-k2.6",
-      "kimi-k2.5",
-      "kimi-k3"
-    ],
+    "models": ["moonshot-v1-8k", "kimi-k2.6", "kimi-k2.5", "kimi-k3"],
     "chosen_model": 0,
     "extra_body": null
   },
   "openai": {
     "name": "OpenAI",
+    "is_custom": false,
     "protocol": "OpenAIResponses",
     "base_url": "https://api.openai.com/v1/responses",
     "api_key": null,
-    "models": [
-      "gpt-5.6-luna",
-      "gpt-5.6-terra",
-      "gpt-5.4-mini",
-      "gpt-5.4"
-    ],
+    "models": ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.4-mini", "gpt-5.4"],
     "chosen_model": 0,
     "extra_body": null
   },
   "openrouter": {
     "name": "OpenRouter",
+    "is_custom": false,
     "protocol": "OpenAIChatCompletions",
     "base_url": "https://openrouter.ai/api/v1/chat/completions",
     "api_key": null,
@@ -95,6 +88,7 @@
   },
   "ollama": {
     "name": "Ollama",
+    "is_custom": false,
     "protocol": "OpenAIChatCompletions",
     "base_url": "http://localhost:11434/api/chat",
     "api_key": null,

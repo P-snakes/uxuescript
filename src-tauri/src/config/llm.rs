@@ -3,6 +3,7 @@ pub(crate) mod ollama;
 use anyhow::{bail, Result};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -10,7 +11,7 @@ use std::fmt;
 ///
 /// 序列化时保持原始字符串格式，以兼容现有配置文件；格式化输出始终脱敏，
 /// 防止在日志中直接打印密钥明文。
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Type)]
 #[serde(transparent)]
 pub struct ApiKey(String);
 
@@ -48,7 +49,7 @@ impl fmt::Debug for ApiKey {
 }
 
 /// 支持的大模型 API 发包协议族
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Type)]
 pub enum LLMProtocol {
     OpenAIChatCompletions, // 通用 OpenAI 兼容协议 (Chat Completions)
     OpenAIResponses,       // OpenAI Responses 特殊协议 (/v1/responses)
@@ -56,14 +57,18 @@ pub enum LLMProtocol {
 }
 
 /// 统一的大模型提供商结构体（内置与用户自定义提供商通用纯数据 DTO）
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Type)]
 pub struct LLMProvider {
     pub name: String,            // 提供商显示名称 (如 "DeepSeek 官方", "我的私有中转站")
+    pub is_custom: bool,         // 是否为用户自定义的提供商
     pub protocol: LLMProtocol,   // 采用的 API 协议族
     pub base_url: String,        // 接口基础 URL
     pub api_key: Option<ApiKey>, // API Key (Option 允许免 Key / 未配置)
     pub models: Vec<String>,     // 支持的模型列表
+    #[specta(type = Option<u32>)]
     pub chosen_model: Option<usize>, // 当前选择的模型在 models 列表中的索引
+    #[serde(default)]
+    #[specta(skip)]
     pub extra_body: Option<serde_json::Value>, // 协议特定额外 Body 参数 (如 temperature, stream)
 }
 
