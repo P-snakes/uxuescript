@@ -244,10 +244,11 @@ onUnmounted(() => {
 
   /* 基础尺寸与颜色 */
   --size: 80%;
+  --max-size: 3rem;
   --color: #0d58a4;
   --ball-size: 60%;
 
-  width: var(--size);
+  width: min(var(--size), var(--max-size));
   aspect-ratio: 1;
   height: auto;
   color: var(--color); /* 传导给 SVG 的 scaleColor */
