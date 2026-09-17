@@ -12,13 +12,11 @@ if (-not $versionMatch.Success) {
 
 $version = $versionMatch.Groups[1].Value
 $exePath = Join-Path $root "src-tauri\target\release\uxuescript.exe"
-$archiveDirectory = Join-Path $root "src-tauri\target\release\bundle\zip"
-$archivePath = Join-Path $archiveDirectory "uxs-$version-win-x64.zip"
+$artifactPath = Join-Path (Split-Path -Parent $exePath) "uxs-$version-win-x64.exe"
 
 if (-not (Test-Path -LiteralPath $exePath -PathType Leaf)) {
     throw "Release executable not found: $exePath"
 }
 
-New-Item -ItemType Directory -Path $archiveDirectory -Force | Out-Null
-Compress-Archive -LiteralPath $exePath -DestinationPath $archivePath -Force
-Write-Output "Created $archivePath"
+Move-Item -LiteralPath $exePath -Destination $artifactPath -Force
+Write-Output "Created $artifactPath"
