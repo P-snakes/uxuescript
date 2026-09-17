@@ -1,8 +1,7 @@
-mod path;
-
 pub mod llm;
 pub mod metadata;
 pub mod options;
+pub mod path;
 
 use llm::LLMConfig;
 use metadata::MetadataConfig;
@@ -32,9 +31,16 @@ impl Config {
                 .unwrap_or_default()
                 .as_str(),
         ) {
-            Ok(loaded) => loaded,
+            Ok(loaded) => Self::with_current_version(loaded, &config.metadata.version),
             Err(_) => config,
         }
+    }
+
+    fn with_current_version(mut loaded: Self, current_version: &str) -> Self {
+        if loaded.metadata.version != current_version {
+            loaded.metadata.version = current_version.into();
+        }
+        loaded
     }
 
     pub fn save(&self) -> Result<()> {
@@ -45,3 +51,21 @@ impl Config {
 }
 
 pub static CONFIG: LazyLock<Config> = LazyLock::new(Config::load);
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+
+    #[test]
+    fn loaded_config_keeps_user_settings_when_version_changes() {
+        let current = Config::default();
+        let mut loaded = Config::default();
+        loaded.metadata.version = "2.0.1".into();
+        loaded.options.lock().mute_webview = true;
+
+        let loaded = Config::with_current_version(loaded, &current.metadata.version);
+
+        assert_eq!(loaded.metadata.version, current.metadata.version);
+        assert!(loaded.options.lock().mute_webview);
+    }
+}
