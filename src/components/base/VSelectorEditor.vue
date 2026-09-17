@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import SaveIcon from "@/assets/save.svg?component";
 import CancelIcon from "@/assets/cancel.svg?component";
 import { useScaleFeedback } from "@/composables/useScaleFeedback";
@@ -16,6 +16,7 @@ const { data, methods } = defineProps<{
 
 const inputRef = ref<InstanceType<typeof VTextBox> | null>(null);
 const scaleFeedback = useScaleFeedback({ hoverScale: 1.2 });
+const canSave = computed(() => Boolean(data.draft.trim()));
 defineExpose({ focus: () => inputRef.value?.focus() });
 
 const onEnter = (event: KeyboardEvent) => {
@@ -23,6 +24,12 @@ const onEnter = (event: KeyboardEvent) => {
   event.preventDefault();
   event.stopPropagation();
   methods.save();
+};
+
+const keepEditorFocused = (event: PointerEvent) => event.preventDefault();
+
+const handleSavePointerEnter = (event: PointerEvent) => {
+  if (canSave.value) scaleFeedback.handlePointerEnter(event);
 };
 </script>
 
@@ -48,9 +55,10 @@ const onEnter = (event: KeyboardEvent) => {
         <button
           type="button"
           aria-label="Save"
-          :disabled="!data.draft.trim()"
+          :disabled="!canSave"
           @click.stop="methods.save"
-          @pointerenter="scaleFeedback.handlePointerEnter"
+          @pointerdown="keepEditorFocused"
+          @pointerenter="handleSavePointerEnter"
           @pointerleave="scaleFeedback.handlePointerLeave"
         >
           <SaveIcon
@@ -105,6 +113,6 @@ const onEnter = (event: KeyboardEvent) => {
 
 .editor-actions button:disabled {
   opacity: 0.4;
-  cursor: default;
+  cursor: not-allowed;
 }
 </style>
