@@ -1,41 +1,58 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import VInput from "@/components/base/VInput.vue";
 import VToggle from "@/components/base/VToggle.vue";
-import { useConfigStore } from "@/stores/config";
+import { commands, type OptionsConfig } from "@/services/cmds";
 
-const configStore = useConfigStore();
-const options = computed(() => configStore.options);
+const options = ref<OptionsConfig>();
 const speedValue = computed<number>({
   get: () => options.value?.speedValue ?? 1,
   set: (value) => {
-    if (options.value) options.value.speedValue = value;
+    options.value!.speedValue = value;
   },
 });
-onMounted(() => void configStore.initialize());
+const saveOptions = () =>
+  commands
+    .setOptions(options.value!)
+    .catch((cause) => console.error("保存课程配置失败:", cause));
+
+onMounted(async () => {
+  options.value = await commands.options();
+});
 </script>
 
 <template>
   <div class="course-config-panel">
-    <h2 class="title">Course</h2>
     <div
       v-if="options"
       class="settings-container"
     >
       <VToggle
-        v-model="options.persistSession"
+        :model-value="options.persistSession ?? false"
         label="Perisist Session"
         class="option"
+        @update:model-value="
+          options.persistSession = $event;
+          saveOptions();
+        "
       />
       <VToggle
-        v-model="options.muteWebview"
+        :model-value="options.muteWebview ?? false"
         label="Mute Course"
         class="option"
+        @update:model-value="
+          options.muteWebview = $event;
+          saveOptions();
+        "
       />
       <VToggle
-        v-model="options.speedLock"
+        :model-value="options.speedLock ?? false"
         label="Lock Playspeed"
         class="option"
+        @update:model-value="
+          options.speedLock = $event;
+          saveOptions();
+        "
       />
       <VInput
         id="playing-speed-input"
@@ -45,6 +62,7 @@ onMounted(() => void configStore.initialize());
         aria-label=""
         pattern="\d+(?:\.\d*)?"
         class="option speed-input"
+        @change="saveOptions"
       />
     </div>
   </div>
@@ -60,18 +78,12 @@ onMounted(() => void configStore.initialize());
 .settings-container {
   flex: 1;
   display: flex;
-  gap: 4%;
+  gap: 5%;
+  padding: 5%;
   flex-direction: column;
 }
-.title {
-  display: flex;
-  height: 20%;
-  font-size: 1.5rem;
-  align-items: center;
-  justify-content: center;
-}
 .option {
-  height: 22%;
+  height: 15%;
 }
 .speed-input :deep(.input-field) {
   text-align: center;

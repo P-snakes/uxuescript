@@ -3,10 +3,9 @@ import { reactive, ref, watch } from "vue";
 import VButton from "@/components/base/VButton.vue";
 import TheAPIPanel from "@/components/TheConfigPanel/TheAPIPanel.vue";
 import TheCourseConfigPanel from "@/components/panels/TheCourseConfigPanel.vue";
-import { useConfigStore } from "@/stores/config";
 import TheSidebar from "./TheConfigPanel/TheSidebar.vue";
+import { commands } from "@/services/cmds";
 
-const configStore = useConfigStore();
 const configPanel = reactive({
   activeIndex: 0,
   items: [{ name: "API" }, { name: "Course" }],
@@ -47,8 +46,7 @@ watch(
         label="Save"
         class="button-text"
         style="width: 35%; height: 60%"
-        :disabled="configStore.busy"
-        @click="configStore.save"
+        @click="commands.saveConfig"
       />
     </div>
   </div>
