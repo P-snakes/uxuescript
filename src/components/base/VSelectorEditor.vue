@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import SaveIcon from "@/assets/save.svg?component";
+import CancelIcon from "@/assets/cancel.svg?component";
+import { useScaleFeedback } from "@/composables/useScaleFeedback";
 import VTextBox from "./VTextBox.vue";
 
 const { data, methods } = defineProps<{
@@ -12,6 +15,7 @@ const { data, methods } = defineProps<{
 }>();
 
 const inputRef = ref<InstanceType<typeof VTextBox> | null>(null);
+const scaleFeedback = useScaleFeedback({ hoverScale: 1.2 });
 defineExpose({ focus: () => inputRef.value?.focus() });
 
 const onEnter = (event: KeyboardEvent) => {
@@ -43,16 +47,28 @@ const onEnter = (event: KeyboardEvent) => {
       >
         <button
           type="button"
+          aria-label="Save"
           :disabled="!data.draft.trim()"
           @click.stop="methods.save"
+          @pointerenter="scaleFeedback.handlePointerEnter"
+          @pointerleave="scaleFeedback.handlePointerLeave"
         >
-          Save
+          <SaveIcon
+            class="action-icon"
+            aria-hidden="true"
+          />
         </button>
         <button
           type="button"
+          aria-label="Cancel"
           @click.stop="methods.cancel"
+          @pointerenter="scaleFeedback.handlePointerEnter"
+          @pointerleave="scaleFeedback.handlePointerLeave"
         >
-          Cancel
+          <CancelIcon
+            class="action-icon"
+            aria-hidden="true"
+          />
         </button>
       </div>
     </template>
@@ -62,18 +78,29 @@ const onEnter = (event: KeyboardEvent) => {
 <style scoped>
 .editor-actions {
   display: flex;
+  align-items: center;
+  height: 100%;
   gap: 0.5rem;
   margin-left: 0.5rem;
 }
 
 .editor-actions button {
+  width: 1.5rem;
+  height: 75%;
   padding: 0;
   border: 0;
   background: transparent;
   color: #0d58a4;
-  font: inherit;
-  font-size: 0.75rem;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-icon {
+  width: 90%;
+  height: 90%;
+  fill: currentColor;
 }
 
 .editor-actions button:disabled {

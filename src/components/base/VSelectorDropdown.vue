@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import DeleteIcon from "@/assets/delete.svg?component";
+import EditIcon from "@/assets/edit.svg?component";
+import NewIcon from "@/assets/new.svg?component";
+import { useScaleFeedback } from "@/composables/useScaleFeedback";
 import type { SelectorItem } from "./VSelector.types";
 
 const { data, methods } = defineProps<{
@@ -15,6 +19,9 @@ const { data, methods } = defineProps<{
     remove(index: number): void;
   };
 }>();
+
+const scaleFeedback = useScaleFeedback({ hoverScale: 1.25 });
+
 </script>
 
 <template>
@@ -42,16 +49,26 @@ const { data, methods } = defineProps<{
             class="option-action"
             :aria-label="`Edit ${item.label}`"
             @click="methods.edit(index)"
+            @pointerenter="scaleFeedback.handlePointerEnter"
+            @pointerleave="scaleFeedback.handlePointerLeave"
           >
-            Edit
+            <EditIcon
+              class="action-icon action-icon-compact"
+              aria-hidden="true"
+            />
           </button>
           <button
             type="button"
             class="option-action is-danger"
             :aria-label="`Delete ${item.label}`"
             @click="methods.remove(index)"
+            @pointerenter="scaleFeedback.handlePointerEnter"
+            @pointerleave="scaleFeedback.handlePointerLeave"
           >
-            Delete
+            <DeleteIcon
+              class="action-icon action-icon-compact"
+              aria-hidden="true"
+            />
           </button>
         </template>
       </div>
@@ -61,10 +78,15 @@ const { data, methods } = defineProps<{
       >
         <button
           type="button"
-          class="option-label"
+          class="option-label option-create"
+          aria-label="New"
           @click="methods.create"
         >
-          + New
+          <NewIcon
+            class="action-icon create-icon"
+            aria-hidden="true"
+          />
+          <span>New</span>
         </button>
       </div>
     </div>
@@ -89,6 +111,7 @@ const { data, methods } = defineProps<{
   border: 2px solid #0d58a4;
   border-top: none;
   max-height: 175px;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior-y: contain;
   box-shadow: 0 6px 16px rgba(13, 88, 164, 0.15);
@@ -134,16 +157,42 @@ const { data, methods } = defineProps<{
 
 .option-action {
   flex: 0 0 auto;
-  padding: 0 6px;
-  font-size: 0.75rem;
+  align-self: center;
+  width: var(--option-height);
+  height: 75%;
+  padding: 0;
+  color: #0d58a4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.option-action:hover {
-  background: rgba(0, 0, 0, 0.08);
+.option-create {
+  flex: 1;
+  align-self: center;
+  height: 75%;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  justify-content: flex-start;
+  color: #0d58a4;
 }
 
-.option-action.is-danger {
-  color: #a43724;
+.action-icon {
+  width: 75%;
+  height: 75%;
+  fill: currentColor;
+}
+
+.create-icon {
+  width: auto;
+  height: 60%;
+}
+
+.action-icon-compact {
+  width: 60%;
+  height: 60%;
 }
 
 .select-option.is-selected {
@@ -151,7 +200,7 @@ const { data, methods } = defineProps<{
   color: #ffffff;
 }
 
-.is-selected .option-action.is-danger {
-  color: #ffd1c8;
+.is-selected .option-action {
+  color: #ffffff;
 }
 </style>
