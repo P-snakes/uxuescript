@@ -70,7 +70,7 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml
 pnpm exec tauri build
 ```
 
-构建产物位于 `src-tauri/target/release/bundle/`。发布前至少安装并验证一次生成的安装包，确认开屏动画、课程 WebView 登录、模型配置保存和正常退出均可用。
+构建产物位于仓库根目录的 `target/release/bundle/`。发布前至少安装并验证一次生成的安装包，确认开屏动画、课程 WebView 登录、模型配置保存和正常退出均可用。
 
 ## 本地数据
 

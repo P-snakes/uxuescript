@@ -96,13 +96,13 @@ jobs:
           $releaseDirectory = Join-Path $env:GITHUB_WORKSPACE "release"
           New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
 
-          $portableExe = "src-tauri/target/release/uxuescript.exe"
+          $portableExe = "target/release/uxuescript.exe"
           if (-not (Test-Path -LiteralPath $portableExe -PathType Leaf)) {
             throw "Portable executable not found: $portableExe"
           }
           Copy-Item -LiteralPath $portableExe -Destination (Join-Path $releaseDirectory "uxs-$env:VERSION-win-x64.exe")
 
-          $msi = Get-ChildItem -File "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          $msi = Get-ChildItem -File "target/release/bundle/msi/*.msi" | Select-Object -First 1
           if ($null -eq $msi) {
             throw "MSI bundle not found"
           }
@@ -162,7 +162,7 @@ jobs:
           pnpm exec tauri build --bundles dmg
 
           mkdir -p release
-          DMG="$(find src-tauri/target/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' | head -n 1)"
+          DMG="$(find target/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' | head -n 1)"
           test -n "$DMG"
           cp "$DMG" "release/uxs-$VERSION-mac-arm64.dmg"
 
