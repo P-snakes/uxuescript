@@ -231,6 +231,9 @@ jobs:
       - macos
 
     steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
       - name: Download release packages
         uses: actions/download-artifact@v4
         with:
