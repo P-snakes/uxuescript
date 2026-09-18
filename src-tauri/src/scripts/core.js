@@ -23,6 +23,10 @@
       quizOptionClass: ".ans-videoquiz-opt",
       quizSubmitId: "#videoquiz-submit",
       quizContinueId: "#videoquiz-continue",
+      quizSubmittingId: "#videoquiz-submitting",
+      quizFeedbackClass: "#spanHas, #spanNot, #spanNotBack, #spanNotBackPoint",
+      studyContinueClass:
+        ".sp_video_pic_dele2, .ans-videoannotation .continueLearn",
     },
     pdf: { iframeId: "#panView" },
     quiz: {
@@ -379,29 +383,111 @@
     throw new Error(`未识别的任务点类型: ${url}`);
   };
 
+  /**
+   * @typedef {{ answered?: boolean, answerContent?: string, options?: { name?: string, isRight?: boolean | number | string }[] }} ExtQuizData
+   * @typedef {{ current?: number, renderData?: ExtQuizData, objects?: { style?: string, datas?: ExtQuizData[] }[] }} ExtTimeline
+   * @typedef {Window & { Ext?: { getCmp?: (id: string) => ExtTimeline | undefined } }} VideoWindow
+   */
+
+  /** @type {(timeline: HTMLElement, quizRoot: HTMLElement) => ExtQuizData[]} */
+  const getInteractiveQuizAnswers = (timeline, quizRoot) => {
+    const videoWindow = /** @type {VideoWindow | null} */ (
+      timeline.ownerDocument.defaultView
+    );
+    const component = videoWindow?.Ext?.getCmp?.(timeline.id);
+    const active = videoWindow?.Ext?.getCmp?.(quizRoot.id)?.renderData;
+    // Prefer the displayed component; current is incremented before showObject.
+    // Only use the original timeline fallback when the event is unambiguous.
+    const events =
+      component?.objects?.filter(
+        ({ style }) => style === "InteractiveQuiz" || style === "QUIZ",
+      ) ?? [];
+    const current = component?.objects?.[(component.current ?? 0) - 1];
+    const event =
+      current && events.includes(current)
+        ? current
+        : events.length === 1
+          ? events[0]
+          : undefined;
+    return (active ? [active] : (event?.datas ?? [])).map(
+      ({ answered, answerContent, options }) => ({
+        answered,
+        answerContent,
+        options,
+      }),
+    );
+  };
+
+  /** @type {(node: Element | null) => boolean} */
+  const isVideoQuizVisible = (node) => {
+    if (!node?.isConnected) return false;
+    for (let el = node; el; el = el.parentElement) {
+      const style = el.ownerDocument.defaultView?.getComputedStyle(el);
+      if (
+        el.hasAttribute("hidden") ||
+        style?.display === "none" ||
+        style?.visibility === "hidden"
+      )
+        return false;
+    }
+    return true;
+  };
+
+  /** @type {(root: ParentNode, selector: string) => HTMLElement | undefined} */
+  const findVideoQuizControl = (root, selector) =>
+    /** @type {HTMLElement[]} */ (
+      Array.from(root.querySelectorAll(selector))
+    ).find(
+      (node) =>
+        isVideoQuizVisible(node) &&
+        !node.matches(':disabled, [aria-disabled="true"]'),
+    );
+
   /** @type {(timeline: HTMLElement, videoEl: HTMLMediaElement) => Promise<HTMLElement | null>} */
-  const observeInteractiveQuiz = (timeline, videoEl) =>
-    new Promise((resolve) => {
-      const observer = new MutationObserver(check);
+  const observeInteractiveQuiz = async (timeline, videoEl) => {
+    const next = await wait.until(() => {
+      if (!timeline.isConnected || videoEl.ended) return { node: null };
+      const node = findVideoQuizControl(
+        timeline,
+        SELECTORS.video.quizClass + "," + SELECTORS.video.studyContinueClass,
+      );
+      return node ? { node } : null;
+    }, Infinity);
+    return next?.node ?? null;
+  };
 
-      function check() {
-        const quizRoot = /** @type {HTMLElement | null} */ (
-          timeline.querySelector(SELECTORS.video.quizClass)
+  /** @type {(answer: ExtQuizData | undefined, inputs: HTMLInputElement[]) => number[] | null} */
+  const getVideoQuizSelection = (answer, inputs) => {
+    if (answer?.options?.length && answer.options.length !== inputs.length)
+      return null;
+    const names = (answer?.options ?? []).map(({ name }) =>
+      String(name ?? "").toUpperCase(),
+    );
+    const content = String(answer?.answerContent ?? "")
+      .trim()
+      .toUpperCase();
+    let selected = /** @type {number[]} */ ([]);
+    if (content && names.length === inputs.length) {
+      const tokens = content.split(/[\s,，;；]+/);
+      const answers = tokens.every((token) => names.includes(token))
+        ? tokens
+        : Array.from(content.replace(/[\s,，;；]+/g, ""));
+      if (answers.every((name) => names.includes(name)))
+        selected = names.flatMap((name, index) =>
+          answers.includes(name) ? [index] : [],
         );
-        if (!quizRoot && !videoEl.ended) return;
-        observer.disconnect();
-        videoEl.removeEventListener("ended", check);
-        resolve(quizRoot);
-      }
-
-      observer.observe(timeline, { childList: true, subtree: true });
-      videoEl.addEventListener("ended", check, { once: true });
-      check();
-    });
-
-  /** @type {(optionNode: HTMLElement) => void} */
-  const clickInteractiveQuizOption = (optionNode) =>
-    optionNode.querySelector("label")?.click();
+    }
+    if (!selected.length) {
+      selected = inputs.flatMap((input, index) => {
+        const value = answer?.options?.[index]?.isRight ?? input.value;
+        return [true, 1, "1", "true"].includes(value) ? [index] : [];
+      });
+    }
+    return selected.length &&
+      (inputs[0]?.type === "checkbox" || selected.length === 1)
+      ? selected
+      : null;
+  };
 
   /** @type {(quizRoot: HTMLElement, selected: number[]) => Promise<void>} */
   const fillInteractiveQuiz = async (quizRoot, selected) => {
@@ -410,13 +496,95 @@
       SELECTORS.video.quizOptionClass,
       quizRoot,
     );
-    for (const input of quizRoot.querySelectorAll("input")) {
+    const inputs = /** @type {HTMLInputElement[]} */ (
+      await wait.elements(
+        null,
+        'input[type="radio"], input[type="checkbox"]',
+        quizRoot,
+      )
+    );
+    for (const input of inputs) {
       input.checked = false;
       input.removeAttribute("checked");
     }
     for (const index of selected) {
-      clickInteractiveQuizOption(optionNodes[index]);
+      const label = await wait.element(null, "label", optionNodes[index]);
+      label.click();
     }
+  };
+
+  /** @type {(quizRoot: HTMLElement) => Promise<string | null>} */
+  const submitVideoQuiz = async (quizRoot) => {
+    const feedback = await wait.elements(
+      null,
+      SELECTORS.video.quizFeedbackClass,
+      quizRoot,
+      false,
+    );
+    const submit = await wait.until(() =>
+      findVideoQuizControl(quizRoot, SELECTORS.video.quizSubmitId),
+    );
+    if (!submit) return null;
+    // Repeated wrong answers may set the same display value without a DOM
+    // mutation. Reset only the previous result's presentation before clicking;
+    // never change Ext data or use a stale message as a new response.
+    const previous = feedback.map((node) => ({
+      node,
+      display: node.style.display,
+    }));
+    for (const node of feedback) node.style.display = "none";
+    submit.click();
+    const result = await wait.until(() => {
+      if (!isVideoQuizVisible(quizRoot)) return "dismissed";
+      if (findVideoQuizControl(quizRoot, SELECTORS.video.quizSubmittingId))
+        return null;
+      if (findVideoQuizControl(quizRoot, "#spanHas")) return "correct";
+      if (
+        findVideoQuizControl(
+          quizRoot,
+          "#spanNot, #spanNotBack, #spanNotBackPoint",
+        )
+      )
+        return "wrong";
+      if (
+        findVideoQuizControl(quizRoot, SELECTORS.video.quizContinueId) &&
+        !findVideoQuizControl(quizRoot, SELECTORS.video.quizSubmitId)
+      )
+        return "continue";
+      return null;
+    }, 15000);
+    if (!result) {
+      for (const { node, display } of previous)
+        if (node.isConnected && node.style.display === "none")
+          node.style.display = display;
+    }
+    return result;
+  };
+
+  /** @type {(timeline: HTMLElement, quizRoot: HTMLElement, videoEl: HTMLMediaElement) => Promise<boolean>} */
+  const continueVideoQuiz = async (timeline, quizRoot, videoEl) => {
+    const clicked = new WeakSet();
+    const continued = await wait.until(() => {
+      if (!timeline.isConnected || videoEl.ended) return true;
+      const current = findVideoQuizControl(timeline, SELECTORS.video.quizClass);
+      if (current && current !== quizRoot) return true;
+      const button =
+        findVideoQuizControl(quizRoot, SELECTORS.video.quizContinueId) ??
+        findVideoQuizControl(timeline, SELECTORS.video.studyContinueClass);
+      if (button && !clicked.has(button)) {
+        clicked.add(button);
+        button.click();
+      }
+      // A hidden popup may still be in the DOM. Wait for playback, or the
+      // next question, while allowing a delayed continuation button to appear.
+      return !isVideoQuizVisible(quizRoot) &&
+        !videoEl.paused &&
+        !findVideoQuizControl(timeline, SELECTORS.video.studyContinueClass)
+        ? true
+        : null;
+    }, 15000);
+    if (!continued) console.warn("视频题确认后未恢复播放，请检查继续学习提示");
+    return !!continued;
   };
 
   /** @type {(taskDoc: Document, videoEl: HTMLMediaElement) => Promise<void>} */
@@ -428,104 +596,126 @@
       false,
     );
     if (!timeline) return;
-
-    // Both QUIZ and InteractiveQuiz render this popup. Read the active popup
-    // instead of the first timeline event or a previous answerContent.
     while (true) {
       const quizRoot = await observeInteractiveQuiz(timeline, videoEl);
       if (!quizRoot) return;
-
-      /** @type {(selector: string) => boolean} */
-      const visible = (selector) => {
-        const node = quizRoot.querySelector(selector);
-        const style = node && taskDoc.defaultView?.getComputedStyle(node);
-        return !!node?.isConnected && !!style &&
-          style.display !== "none" && style.visibility !== "hidden";
-      };
-      const closed = () => !timeline.contains(quizRoot);
-      const finish = async () => {
-        const button = /** @type {HTMLElement | null} */ (
-          quizRoot.querySelector(SELECTORS.video.quizContinueId)
-        );
-        if (visible(SELECTORS.video.quizContinueId)) button?.click();
-        assert(
-          await wait.until(closed),
-          "视频题已答对，但弹窗未关闭",
-        );
-      };
-
-      if (visible("#spanHas")) {
-        await finish();
+      if (!quizRoot.matches(SELECTORS.video.quizClass)) {
+        if (!(await continueVideoQuiz(timeline, quizRoot, videoEl))) return;
         continue;
       }
-
-      const quizItems = await wait.elements(
+      const ready = await wait.until(() => {
+        if (!isVideoQuizVisible(quizRoot)) return "dismissed";
+        if (findVideoQuizControl(quizRoot, SELECTORS.video.quizSubmittingId))
+          return null;
+        if (findVideoQuizControl(quizRoot, "#spanHas")) return "continue";
+        if (findVideoQuizControl(quizRoot, SELECTORS.video.quizSubmitId))
+          return "submit";
+        if (findVideoQuizControl(quizRoot, SELECTORS.video.quizContinueId))
+          return "continue";
+        return null;
+      }, 15000);
+      if (!ready) {
+        console.warn("视频互动题未就绪，暂停自动答题");
+        return;
+      }
+      if (ready !== "submit") {
+        if (!(await continueVideoQuiz(timeline, quizRoot, videoEl))) return;
+        continue;
+      }
+      const items = await wait.elements(
         null,
         SELECTORS.video.quizItemClass,
         quizRoot,
       );
-      assert(quizItems.length === 1, "视频弹窗包含多题，暂不支持自动穷举");
-      const optionNodes = await wait.elements(
-        null,
-        SELECTORS.video.quizOptionClass,
-        quizItems[0],
+      const inputs = await Promise.all(
+        items.map(
+          async (item) =>
+            /** @type {HTMLInputElement[]} */ (
+              await wait.elements(
+                null,
+                'input[type="radio"], input[type="checkbox"]',
+                item,
+              )
+            ),
+        ),
       );
-      const multiple = !!quizItems[0].querySelector('input[type="checkbox"]');
-      assert(
-        !multiple || optionNodes.length <= 20,
-        "视频多选题选项过多，停止穷举",
-      );
-      const attempts = multiple
-        ? 2 ** optionNodes.length - 1
-        : optionNodes.length;
-      let solved = false;
-
-      for (let attempt = 0; attempt < attempts; attempt++) {
-        assert(!closed(), "视频题弹窗意外关闭，停止当前题重试");
-        assert(
-          visible(SELECTORS.video.quizSubmitId),
-          "视频题当前不允许再次提交，停止重试",
-        );
-        const selected = multiple
-          ? optionNodes.flatMap((_, index) =>
-              ((attempt + 1) & (2 ** index)) ? [index] : [],
+      // Let dynamically loaded Ext data arrive before considering fallback.
+      const extSelections = await wait.until(() => {
+        const answers = getInteractiveQuizAnswers(timeline, quizRoot);
+        for (const [index, item] of items.entries()) {
+          inputs[index] = /** @type {HTMLInputElement[]} */ (
+            Array.from(
+              item.querySelectorAll(
+                'input[type="radio"], input[type="checkbox"]',
+              ),
             )
-          : [attempt];
-        await fillInteractiveQuiz(quizItems[0], selected);
-
-        // Clear previous feedback so a failed request cannot reuse an old
-        // 'wrong answer' message as the result of this submission.
-        for (const node of quizRoot.querySelectorAll(
-          "#spanHas, #spanNot, #spanNotBack, #spanNotBackPoint",
-        )) {
-          /** @type {HTMLElement} */ (node).style.display = "none";
+          );
         }
-        const submitButton = await wait.element(
-          null,
-          SELECTORS.video.quizSubmitId,
-          quizRoot,
+        const selections = inputs.map((options, index) =>
+          getVideoQuizSelection(answers[index], options),
         );
-        submitButton.click();
-        const result = await wait.until(() => {
-          // Ordinary QUIZ may close automatically after a correct answer.
-          if (closed()) return "closed";
-          if (visible("#videoquiz-submitting")) return null;
-          if (visible("#spanHas")) return "correct";
-          if (visible("#spanNot") || visible("#spanNotBack") ||
-              visible("#spanNotBackPoint")) return "wrong";
-          return null;
-        }, 15000);
-        assert(result, "视频题提交结果超时，停止重试");
-        if (result === "closed" || result === "correct") {
-          if (result === "correct") await finish();
-          solved = true;
-          break;
-        }
-        // Do not click 'continue' after an incorrect answer; try the next
-        // candidate only while the page still permits resubmission.
-        await sleep(500);
+        return selections.every(Boolean) ? selections : null;
+      });
+      let result = /** @type {string | null} */ (null);
+      const attempted = new Set();
+      if (extSelections) {
+        for (const [index, selected] of extSelections.entries())
+          await fillInteractiveQuiz(
+            items[index],
+            /** @type {number[]} */ (selected),
+          );
+        attempted.add(JSON.stringify(extSelections[0]));
+        result = await submitVideoQuiz(quizRoot);
       }
-      assert(solved, "视频题已尝试所有选项组合，仍未答对");
+      // Ext remains the primary path. Retry only after an explicit wrong
+      // result, or when Ext supplied no usable answer, never after a timeout.
+      if (!extSelections || result === "wrong") {
+        if (items.length !== 1 || inputs[0].length > 20) {
+          console.warn("当前视频题不适合选项降级，请手动作答");
+          return;
+        }
+        const count = inputs[0].length;
+        const multiple = inputs[0][0].type === "checkbox";
+        const attempts = multiple ? 2 ** count - 1 : count;
+        for (let attempt = 0; attempt < attempts; attempt++) {
+          const selected = multiple
+            ? inputs[0].flatMap((_, index) =>
+                (attempt + 1) & (2 ** index) ? [index] : [],
+              )
+            : [attempt];
+          const key = JSON.stringify(selected);
+          if (attempted.has(key)) continue;
+          attempted.add(key);
+          const canRetry = await wait.until(() => {
+            if (!isVideoQuizVisible(quizRoot)) return "dismissed";
+            if (
+              findVideoQuizControl(quizRoot, SELECTORS.video.quizSubmittingId)
+            )
+              return null;
+            if (findVideoQuizControl(quizRoot, SELECTORS.video.quizSubmitId))
+              return "submit";
+            if (findVideoQuizControl(quizRoot, SELECTORS.video.quizContinueId))
+              return "continue";
+            return null;
+          });
+          if (canRetry !== "submit") {
+            result = canRetry;
+            break;
+          }
+          await fillInteractiveQuiz(items[0], selected);
+          result = await submitVideoQuiz(quizRoot);
+          if (result !== "wrong") break;
+        }
+      }
+      if (!result || result === "wrong") {
+        console.warn(
+          result
+            ? "视频题候选答案均未通过，请手动作答"
+            : "视频题提交未获得明确结果，暂停重试",
+        );
+        return;
+      }
+      if (!(await continueVideoQuiz(timeline, quizRoot, videoEl))) return;
     }
   };
 
