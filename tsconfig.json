@@ -33,6 +33,7 @@
     "src/**/*.d.ts",
     "src/**/*.tsx",
     "src/**/*.vue",
+    "tests/**/*.ts",
     "new-core.js",
     "src-tauri/src/scripts/core.js",
   ],

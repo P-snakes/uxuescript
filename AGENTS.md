@@ -12,6 +12,19 @@
 - After correcting a premise, re-audit every conclusion that depended on it. Do not resurrect removed code, disproven races, or stale findings in later summaries.
 - Distinguish the current worktree from committed history. Existing and untracked changes belong to the user unless explicitly identified otherwise.
 
+## Agent and IDE Terminal Environment
+
+- Treat the Zed terminal and Agent command runner as potentially different sandboxes, even when they use the same Windows user and machine. The Agent process may inherit a PATH entry but still be unable to read the user-level executable behind it.
+- When a command works in the user's terminal but not in the Agent runner, verify the user's executable and version first:
+
+  ```powershell
+  Get-Command <command> | Format-List CommandType,Source,Definition
+  <command> --version
+  ```
+
+- Classify `Access is denied` while resolving a known user-level executable as an Agent sandbox or permission boundary until proven otherwise. Do not report the tool as uninstalled or ask the user to reinstall it solely from the Agent failure.
+- For user-level tools such as pnpm, prefer having the user run the command in the Zed terminal, or request the required additional file access when that is necessary. Do not modify project source, lockfiles, or build scripts merely to work around the Agent runner's environment boundary.
+
 ## Evidence Order for Reviews and Diagnoses
 
 Use evidence in this order:
