@@ -79,6 +79,20 @@ describe("useLLMProviders", () => {
     });
   });
 
+  it("restores a built-in provider when the stored ID differs only by case", async () => {
+    const defaultProvider = makeProvider({ name: "BigModel" });
+    const deepSeekProvider = makeProvider({ name: "DeepSeek" });
+    commandMocks.providers.mockResolvedValue([
+      defaultProvider,
+      deepSeekProvider,
+    ]);
+    commandMocks.currentProvider.mockResolvedValue("deepseek");
+
+    const { state } = await mountComposable();
+
+    expect(state.selectedProvider.value).toEqual(deepSeekProvider);
+  });
+
   it("trims and persists a new provider before selecting it", async () => {
     const defaultProvider = makeProvider();
     commandMocks.providers.mockResolvedValue([defaultProvider]);

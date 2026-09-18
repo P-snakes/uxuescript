@@ -1,0 +1,169 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Build Windows packages
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Synchronize and validate version
+        shell: pwsh
+        run: |
+          pnpm sync:version
+
+          $cargoToml = Get-Content -Raw src-tauri/Cargo.toml
+          $version = [regex]::Match($cargoToml, '(?m)^version\s*=\s*"([^"]+)"').Groups[1].Value
+          $tagVersion = $env:GITHUB_REF_NAME -replace '^v', ''
+
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Cannot read package version from src-tauri/Cargo.toml"
+          }
+          if ($version -ne $tagVersion) {
+            throw "Release tag version '$tagVersion' does not match Cargo version '$version'"
+          }
+
+          "VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Build MSI and portable executable
+        shell: pwsh
+        run: |
+          pnpm exec tauri build --bundles msi
+
+          $releaseDirectory = Join-Path $env:GITHUB_WORKSPACE "release"
+          New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
+
+          $portableExe = "src-tauri/target/release/uxuescript.exe"
+          if (-not (Test-Path -LiteralPath $portableExe -PathType Leaf)) {
+            throw "Portable executable not found: $portableExe"
+          }
+          Copy-Item -LiteralPath $portableExe -Destination (Join-Path $releaseDirectory "uxs-$env:VERSION-win-x64.exe")
+
+          $msi = Get-ChildItem -File "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          if ($null -eq $msi) {
+            throw "MSI bundle not found"
+          }
+          Copy-Item -LiteralPath $msi.FullName -Destination (Join-Path $releaseDirectory "uxs-$env:VERSION-win-x64.msi")
+
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: release/*
+          if-no-files-found: error
+
+  macos:
+    name: Build macOS package
+    runs-on: macos-14
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Synchronize and validate version
+        run: |
+          pnpm sync:version
+
+          VERSION="$(sed -nE 's/^version[[:space:]]*=[[:space:]]*"([^"]+)"/\1/p' src-tauri/Cargo.toml | head -n 1)"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+
+          test -n "$VERSION"
+          test "$VERSION" = "$TAG_VERSION" || {
+            echo "Release tag version '$TAG_VERSION' does not match Cargo version '$VERSION'"
+            exit 1
+          }
+
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Build macOS DMG
+        run: |
+          test "$(uname -m)" = "arm64"
+          pnpm exec tauri build --bundles dmg
+
+          mkdir -p release
+          DMG="$(find src-tauri/target/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' | head -n 1)"
+          test -n "$DMG"
+          cp "$DMG" "release/uxs-$VERSION-mac-arm64.dmg"
+
+      - name: Upload macOS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: release/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - windows
+      - macos
+
+    steps:
+      - name: Download release packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-release'
+          path: release
+          merge-multiple: true
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release/* \
+              --verify-tag \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi

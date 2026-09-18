@@ -107,9 +107,12 @@ export function useLLMProviders() {
       commands.currentProvider(),
     ]);
     providers.push(...loadedProviders);
+    const normalizedActiveProvider = activeProvider.toLowerCase();
     selectedProviderIndex.value = Math.max(
       0,
-      loadedProviders.findIndex((provider) => provider.name === activeProvider),
+      loadedProviders.findIndex(
+        (provider) => provider.name.toLowerCase() === normalizedActiveProvider,
+      ),
     );
   });
 

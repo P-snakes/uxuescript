@@ -28,6 +28,18 @@ pub fn current_provider() -> String {
     provider
 }
 
+fn find_provider_id(
+    providers: &std::collections::HashMap<String, LLMProvider>,
+    name: &str,
+) -> Option<String> {
+    let normalized_name = name.trim().to_lowercase();
+    providers.iter().find_map(|(id, provider)| {
+        (id.to_lowercase() == normalized_name
+            || provider.name.to_lowercase() == normalized_name)
+            .then(|| id.clone())
+    })
+}
+
 /// 新增或更新一个自定义大语言模型提供商。
 #[tauri::command]
 #[specta::specta]
@@ -90,9 +102,9 @@ pub fn remove_provider(name: String) -> CommandsResult<()> {
 pub fn switch_provider(name: String) -> CommandsResult<()> {
     log::debug!("正在切换 AI Provider 到 [{}]", name);
     let providers = CONFIG.llm.providers.lock();
-    if providers.contains_key(&name) {
-        *CONFIG.llm.active_provider.lock() = name.clone();
-        log::info!("成功切换 AI Provider 到 [{}]", name);
+    if let Some(provider_id) = find_provider_id(&providers, &name) {
+        *CONFIG.llm.active_provider.lock() = provider_id.clone();
+        log::info!("成功切换 AI Provider 到 [{}]", provider_id);
         Ok(())
     } else {
         Err(anyhow::anyhow!("找不到 ID 为 [{}] 的大模型提供商", name).into())
