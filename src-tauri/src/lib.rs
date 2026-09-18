@@ -18,7 +18,10 @@ pub fn run() {
     // 禁用 WebView2 硬件 GPU 加速以降低 100MB+ 内存占用并提升性能
     std::env::set_var(
         "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-        "--disable-gpu --lang=zh-CN --accept-lang=zh-CN,zh",
+        "--disable-gpu --disable-background-timer-throttling \
+         --disable-renderer-backgrounding \
+         --disable-backgrounding-occluded-windows \
+         --lang=zh-CN --accept-lang=zh-CN,zh",
     );
 
     tauri::Builder::default()

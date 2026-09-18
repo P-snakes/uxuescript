@@ -924,8 +924,8 @@
       : `${config.videoSpeedValue}x`;
     const configSummary = `当前配置：[视频倍速: ${speedInfo} | 自动静音: ${config.muteVideo ? "已开启" : "已关闭"}]`;
 
-    const isConfirmed = confirm(
-      `[使用须知与运行指南 v2.1.1]
+    let isConfirmed = confirm(
+      `[使用须知与运行指南 v2.1.2]
 1. 免责声明：本脚本仅供自动化测试与学习交流使用，请遵守相关法律法规及平台规定。
 2. 前置准备：建议关闭浏览器开发者工具(DevTools)，避免触发调试拦截。
 3. ${configSummary}
@@ -937,6 +937,14 @@
 
 是否确认开始运行？`,
     );
+    if (
+      config.hasBackend &&
+      (navigator.platform.includes("Mac") ||
+        navigator.userAgent.includes("Mac OS X"))
+    ) {
+      // 临时补丁：macOS WKWebView 未接入 JavaScript confirm，避免误判为用户取消。
+      isConfirmed = true;
+    }
     if (!isConfirmed) {
       console.info("用户已取消脚本运行");
       await emit.cancelled();
