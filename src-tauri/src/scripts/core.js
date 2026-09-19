@@ -380,25 +380,118 @@
   };
 
   /**
-   * @typedef {{ answered?: boolean, answerContent?: string, options?: { name?: string }[] }} ExtQuizData
-   * @typedef {{ objects?: { style?: string, datas?: ExtQuizData[] }[] }} ExtTimeline
+   * @typedef {{ answered?: boolean, answerContent?: string, resourceId?: number | string, memberinfo?: string, questionType?: string, options?: { name?: string }[] }} ExtQuizData
+   * @typedef {{ style?: string, datas?: ExtQuizData[] }} ExtQuizObject
+   * @typedef {{ validationUrl2?: string, objects?: ExtQuizObject[] }} ExtTimeline
    * @typedef {Window & { Ext?: { getCmp?: (id: string) => ExtTimeline | undefined } }} VideoWindow
+   * @typedef {{ isRight?: boolean | number | string }} ExtValidationResult
    */
 
-  /** @type {(timeline: HTMLElement) => ExtQuizData[]} */
-  const getInteractiveQuizAnswers = (timeline) => {
+  /**
+   * @param {string} validationUrl
+   * @param {ExtQuizData} quizData
+   * @param {string} answerContent
+   * @param {string} host
+   * @returns {string}
+   */
+  const buildValidationUrl = (validationUrl, quizData, answerContent, host) => {
+    const url = new URL(validationUrl, host);
+    url.searchParams.set("_dc", String(Date.now()));
+    url.searchParams.set("eventid", String(quizData.resourceId));
+    url.searchParams.set("memberinfo", quizData.memberinfo);
+    url.searchParams.set("answerContent", answerContent);
+    return url.href;
+  };
+
+  /** @param {ExtQuizData} quizData @returns {string[]} */
+  const getAnswerCandidates = (quizData) => {
+    const optionNames = (quizData.options ?? [])
+      .map(({ name }) =>
+        String(name ?? "")
+          .trim()
+          .toUpperCase(),
+      )
+      .filter(Boolean);
+
+    /** @type {string[]} */
+    const candidates = [];
+    /** @type {boolean} */
+    const isMulti = String(quizData.questionType ?? "").includes("多选");
+    for (const optionName of optionNames) {
+      /** @type {string[]} */
+      const previous = candidates.slice();
+      candidates.push(optionName);
+      if (isMulti) {
+        for (const candidate of previous)
+          candidates.push(candidate + optionName);
+      }
+    }
+    return candidates;
+  };
+
+  /**
+   * @param {string} url
+   * @returns {Promise<ExtValidationResult>}
+   */
+  const requestValidation = async (url) => {
+    const response = await fetch(url, { credentials: "include" });
+    if (!response.ok)
+      throw new Error(`互动题验证请求失败：HTTP ${response.status}`);
+    return /** @type {ExtValidationResult} */ (await response.json());
+  };
+
+  /**
+   * @param {string} validationUrl
+   * @param {ExtQuizData} quizData
+   * @param {string} host
+   * @returns {Promise<string>}
+   */
+  const resolveInteractiveQuizAnswer = async (
+    validationUrl,
+    quizData,
+    host,
+  ) => {
+    const candidates = getAnswerCandidates(quizData);
+    const results = await Promise.all(
+      candidates.map(async (answerContent) => ({
+        answerContent,
+        result: await requestValidation(
+          buildValidationUrl(validationUrl, quizData, answerContent, host),
+        ),
+      })),
+    );
+    const correct = results.find(({ result }) => result.isRight);
+    if (!correct) throw new Error("互动题验证未返回正确答案");
+    return correct.answerContent;
+  };
+
+  /** @type {(timeline: HTMLElement) => Promise<ExtQuizData[]>} */
+  const getInteractiveQuizData = async (timeline) => {
     const videoWindow = /** @type {VideoWindow | null} */ (
       timeline.ownerDocument.defaultView
     );
-    const datas =
-      videoWindow?.Ext?.getCmp?.(timeline.id)?.objects?.find(
-        ({ style }) => style === "InteractiveQuiz",
-      )?.datas ?? [];
-    return datas.map(({ answered, answerContent, options }) => ({
-      answered,
-      answerContent,
-      options,
-    }));
+    const component = videoWindow?.Ext?.getCmp?.(timeline.id);
+    if (!component?.objects?.length) return [];
+
+    const quizObject = component.objects.find(
+      ({ style }) => style === "QUIZ" || style === "InteractiveQuiz",
+    );
+    if (!quizObject?.datas?.length) return [];
+
+    const host = timeline.ownerDocument.location.origin;
+    const datas = /** @type {ExtQuizData[]} */ (
+      structuredClone(quizObject.datas)
+    );
+    for (const quizData of datas) {
+      if (!String(quizData.answerContent ?? "").trim()) {
+        quizData.answerContent = await resolveInteractiveQuizAnswer(
+          /** @type {string} */ (component.validationUrl2),
+          quizData,
+          host,
+        );
+      }
+    }
+    return datas;
   };
 
   /** @type {(timeline: HTMLElement, videoEl: HTMLMediaElement) => Promise<HTMLElement | null>} */
@@ -425,15 +518,15 @@
   const clickInteractiveQuizOption = (optionNode) =>
     optionNode.querySelector("label")?.click();
 
-  /** @type {(quizRoot: HTMLElement, answer: ExtQuizData) => Promise<void>} */
-  const fillInteractiveQuiz = async (quizRoot, answer) => {
+  /** @type {(quizRoot: HTMLElement, quizData: ExtQuizData) => Promise<void>} */
+  const fillInteractiveQuiz = async (quizRoot, quizData) => {
     const optionNodes = await wait.elements(
       null,
       SELECTORS.video.quizOptionClass,
       quizRoot,
     );
     const answerNames = new Set(
-      String(answer.answerContent ?? "")
+      String(quizData.answerContent ?? "")
         .toUpperCase()
         .match(/[A-Z0-9]/g) ?? [],
     );
@@ -441,7 +534,7 @@
       input.checked = false;
       input.removeAttribute("checked");
     }
-    for (const [index, option] of (answer.options ?? []).entries()) {
+    for (const [index, option] of (quizData.options ?? []).entries()) {
       const optionNode = optionNodes[index];
       if (optionNode && answerNames.has(String(option.name).toUpperCase())) {
         clickInteractiveQuizOption(optionNode);
@@ -456,12 +549,8 @@
       SELECTORS.video.timelineClass,
       taskDoc,
     );
-    const answers = await wait.until(() => {
-      const result = getInteractiveQuizAnswers(timeline);
-      return result.length ? result : null;
-    });
-    if (!answers || answers.every((answer) => answer.answered)) return;
-
+    const quizDatas = await getInteractiveQuizData(timeline);
+    if (!quizDatas.length) return;
     const quizRoot = await observeInteractiveQuiz(timeline, videoEl);
     if (!quizRoot) return;
 
@@ -471,9 +560,9 @@
       quizRoot,
     );
 
-    for (const [index, answer] of answers.entries()) {
-      if (!answer.answered && quizItems[index])
-        await fillInteractiveQuiz(quizItems[index], answer);
+    for (const [index, quizData] of quizDatas.entries()) {
+      if (quizItems[index])
+        await fillInteractiveQuiz(quizItems[index], quizData);
     }
 
     const submitButton = await wait.element(
@@ -487,16 +576,16 @@
       null,
       SELECTORS.video.quizContinueId,
       quizRoot,
+      false,
     );
-    await wait.until(() => {
-      if (
-        quizRoot.ownerDocument.defaultView?.getComputedStyle(continueButton)
-          .display === "none"
-      )
-        return null;
-      continueButton.click();
-      return true;
-    });
+
+    if (continueButton) {
+      await wait.until(() => {
+        if (getComputedStyle(continueButton).display === "none") return null;
+        continueButton.click();
+        return true;
+      });
+    }
   };
 
   /** @type {(taskDoc: Document) => Promise<void>} */
