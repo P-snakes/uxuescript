@@ -398,7 +398,7 @@
     const url = new URL(validationUrl, host);
     url.searchParams.set("_dc", String(Date.now()));
     url.searchParams.set("eventid", String(quizData.resourceId));
-    url.searchParams.set("memberinfo", quizData.memberinfo);
+    url.searchParams.set("memberinfo", String(quizData.memberinfo));
     url.searchParams.set("answerContent", answerContent);
     return url.href;
   };
@@ -495,8 +495,8 @@
   };
 
   /** @type {(timeline: HTMLElement, videoEl: HTMLMediaElement) => Promise<HTMLElement | null>} */
-  const observeInteractiveQuiz = (timeline, videoEl) =>
-    new Promise((resolve) => {
+  const observeInteractiveQuiz = (timeline, videoEl) => {
+    return new Promise((resolve) => {
       const observer = new MutationObserver(check);
 
       function check() {
@@ -513,7 +513,7 @@
       videoEl.addEventListener("ended", check, { once: true });
       check();
     });
-
+  };
   /** @type {(optionNode: HTMLElement) => void} */
   const clickInteractiveQuizOption = (optionNode) =>
     optionNode.querySelector("label")?.click();
@@ -619,13 +619,13 @@
     console.info("Video任务点处理完成");
 
     if (config.debugTaskTypes.includes("Video")) {
-      // assert(
-      //   confirm(
-      //     "[DEBUG] Video 任务点处理完成。点击 [确定] 继续，点击 [取消] 中断。",
-      //   ),
-      //   "调试中断：用户取消了 Video 任务点",
-      // );
       await sleep(5000);
+      assert(
+        confirm(
+          "[DEBUG] Video 任务点处理完成。点击 [确定] 继续，点击 [取消] 中断。",
+        ),
+        "调试中断：用户取消了 Video 任务点",
+      );
     }
   };
 
@@ -1004,6 +1004,45 @@
     }
   };
 
+  /** @param {HTMLElement[]} chapterList */
+  const handleCourse = async (chapterList) => {
+    for (const [index, node] of chapterList.entries()) {
+      await emit.chapterProgress(index, node, chapterList);
+      if (
+        chapterNodeStatus(node) !== "Interactive" &&
+        config.debugTaskTypes.length === 0
+      ) {
+        continue;
+      }
+      await safeRun(() => handleChapter(node), "章节处理失败，自动跳过该章节");
+    }
+  };
+
+  /** @param {HTMLElement[]} chapterList */
+  const blockingCount = (chapterList) =>
+    chapterList.filter((node) => chapterNodeStatus(node) === "Blocking").length;
+
+  /** @param {HTMLElement[]} chapterList @returns {Promise<boolean>} */
+  const waitForBlockingDecrease = (chapterList) => {
+    const previousCount = blockingCount(chapterList);
+
+    return new Promise((resolve) => {
+      const observer = new MutationObserver(() => {
+        if (blockingCount(chapterList) < previousCount) {
+          observer.disconnect();
+          resolve(true);
+        }
+      });
+
+      observer.observe(document, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+    });
+  };
+
   /** 脚本全流程执行主入口 */
   const main = async () => {
     await config.loadFromBackend();
@@ -1041,21 +1080,23 @@
     }
     preserveFocusState();
     await emit.started();
+
     const chapterList = chapterNodes(document).filter((node) => {
       const status = chapterNodeStatus(node);
-      return status === "Interactive" || status === "Finished";
+      return (
+        status === "Interactive" ||
+        status === "Finished" ||
+        status === "Blocking"
+      );
     });
 
-    for (const [index, node] of chapterList.entries()) {
-      await emit.chapterProgress(index, node, chapterList);
-      if (
-        chapterNodeStatus(node) === "Finished" &&
-        config.debugTaskTypes.length === 0
-      ) {
-        continue;
-      }
-      await safeRun(() => handleChapter(node), "章节处理失败，自动跳过该章节");
-    }
+    do {
+      await safeRun(() => handleCourse(chapterList), "课程处理失败");
+    } while (
+      blockingCount(chapterList) > 0 &&
+      (await waitForBlockingDecrease(chapterList))
+    );
+
     await emit.finished();
   };
 
