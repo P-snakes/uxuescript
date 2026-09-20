@@ -310,14 +310,23 @@
     },
   };
 
+  /** @type {AudioContext | null} */
+  let muteContext = null;
+
   /**
-   * 预先对视频节点做静音处理 (播放前调用)
+   * 静音视频输出，但保持媒体元素本身处于非静音状态。
    * @param {HTMLMediaElement} videoEl
    */
   const muteVideo = (videoEl) => {
-    if (!videoEl) return;
-    videoEl.muted = true;
-    videoEl.defaultMuted = true;
+    videoEl.muted = false;
+    videoEl.defaultMuted = false;
+    const context = (muteContext ??= new AudioContext());
+    const gain = context.createGain();
+    gain.gain.value = 0;
+    context
+      .createMediaElementSource(videoEl)
+      .connect(gain)
+      .connect(context.destination);
   };
 
   /**
