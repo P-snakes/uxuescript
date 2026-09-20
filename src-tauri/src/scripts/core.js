@@ -1022,24 +1022,14 @@
   const blockingCount = (chapterList) =>
     chapterList.filter((node) => chapterNodeStatus(node) === "Blocking").length;
 
-  /** @param {HTMLElement[]} chapterList @returns {Promise<boolean>} */
-  const waitForBlockingDecrease = (chapterList) => {
-    const previousCount = blockingCount(chapterList);
-
-    return new Promise((resolve) => {
-      const observer = new MutationObserver(() => {
-        if (blockingCount(chapterList) < previousCount) {
-          observer.disconnect();
-          resolve(true);
-        }
-      });
-
-      observer.observe(document, {
-        subtree: true,
-        childList: true,
-        attributes: true,
-        attributeFilter: ["class"],
-      });
+  const totalChapterList = () => {
+    return chapterNodes(document).filter((node) => {
+      const status = chapterNodeStatus(node);
+      return (
+        status === "Interactive" ||
+        status === "Finished" ||
+        status === "Blocking"
+      );
     });
   };
 
@@ -1053,7 +1043,7 @@
     const configSummary = `当前配置：[视频倍速: ${speedInfo} | 自动静音: ${config.muteVideo ? "已开启" : "已关闭"}]`;
 
     let isConfirmed = confirm(
-      `[使用须知与运行指南 v2.1.3]
+      `[使用须知与运行指南 v2.1.4]
 1. 免责声明：本脚本仅供自动化测试与学习交流使用，请遵守相关法律法规及平台规定。
 2. 前置准备：建议关闭浏览器开发者工具(DevTools)，避免触发调试拦截。
 3. ${configSummary}
@@ -1081,21 +1071,10 @@
     preserveFocusState();
     await emit.started();
 
-    const chapterList = chapterNodes(document).filter((node) => {
-      const status = chapterNodeStatus(node);
-      return (
-        status === "Interactive" ||
-        status === "Finished" ||
-        status === "Blocking"
-      );
-    });
-
     do {
-      await safeRun(() => handleCourse(chapterList), "课程处理失败");
-    } while (
-      blockingCount(chapterList) > 0 &&
-      (await waitForBlockingDecrease(chapterList))
-    );
+      await safeRun(() => handleCourse(totalChapterList()), "课程处理失败");
+      await sleep(5000); // 懒得搞了反正除了粗糙点没啥太大的技术债，死循环算了
+    } while (blockingCount(totalChapterList()) > 0);
 
     await emit.finished();
   };
