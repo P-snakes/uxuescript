@@ -38,7 +38,7 @@ uXueScript 是面向学习通网页版课程的轻量级自动化辅助客户端
 ## 运行预览
 
 <p align="center">
-  <img src="docs/assets/overview-splash-20260912.webp" alt="uXueScript 运行预览" width="960">
+  <img src="docs/assets/overview.webp" alt="uXueScript 运行预览" width="960">
 </p>
 
 ## 核心特性
