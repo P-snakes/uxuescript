@@ -21,6 +21,7 @@ pub fn run() {
         "--disable-gpu --disable-background-timer-throttling \
          --disable-renderer-backgrounding \
          --disable-backgrounding-occluded-windows \
+         --disable-background-media-suspend \
          --lang=zh-CN --accept-lang=zh-CN,zh",
     );
 
